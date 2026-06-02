@@ -1,0 +1,1045 @@
+// =============================================================================
+// Nexus ECM — Prisma Schema  (PostgreSQL)
+// Version 1.0
+//
+// Conventions:
+//   - cuid() primary keys (string).
+//   - createdAt/updatedAt on mutable entities.
+//   - Soft delete via `deletedAt` where history must be retained.
+//   - Money stored as Decimal(18,2). Currency stored alongside where relevant.
+//   - All file fields hold MinIO object keys / URLs.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// 1. IDENTITY, RBAC, AUDIT, NOTIFICATIONS
+// =============================================================================
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  fullName     String
+  avatarUrl    String?
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  employee       Employee?
+  roles          UserRole[]
+  refreshTokens  RefreshToken[]
+  auditLogs      AuditLog[]
+  notifications  Notification[]
+  documentsOwned Folder[]
+  documentShares DocumentShare[]
+  conversations  ConversationMember[]
+  messages       Message[]
+  mentions       MessageMention[]
+  announcements  Announcement[]
+  docOwned       Document[]
+  docVersions    DocumentVersion[]
+
+  @@index([email])
+  @@map("users")
+}
+
+model Role {
+  id          String  @id @default(cuid())
+  name        String  @unique // SUPER_ADMIN, HR, FINANCE, MANAGER, EMPLOYEE, or custom
+  description String?
+  isSystem    Boolean @default(false)
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String  @id @default(cuid())
+  key         String  @unique // e.g. "employee:create", "finance:report:read"
+  module      String
+  description String?
+
+  roles RolePermission[]
+
+  @@index([module])
+  @@map("permissions")
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model RefreshToken {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  deviceInfo String?
+  ip         String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  EXPORT
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  actorId   String?
+  action    AuditAction
+  entity    String
+  entityId  String?
+  before    Json?
+  after     Json?
+  ip        String?
+  userAgent String?
+  createdAt DateTime    @default(now())
+  actor     User?       @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String?
+  data      Json?
+  channel   NotificationChannel @default(IN_APP)
+  isRead    Boolean             @default(false)
+  createdAt DateTime            @default(now())
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+// =============================================================================
+// 2. EMPLOYEE / HR
+// =============================================================================
+
+enum WorkStatus {
+  PROBATION
+  PERMANENT
+  CONTRACT
+  INACTIVE
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  managerId String?
+  createdAt DateTime @default(now())
+
+  positions   Position[]
+  employees   Employee[]    @relation("DeptEmployees")
+  jobHistory  JobHistory[]
+
+  @@map("departments")
+}
+
+model Position {
+  id           String     @id @default(cuid())
+  title        String
+  departmentId String
+  level        Int        @default(1)
+  department   Department @relation(fields: [departmentId], references: [id])
+
+  employees  Employee[]
+  jobHistory JobHistory[]
+
+  @@map("positions")
+}
+
+model Employee {
+  id           String     @id @default(cuid())
+  userId       String?    @unique
+  employeeNo   String     @unique
+  fullName     String
+  photoUrl     String?
+  email        String?
+  phone        String?
+  address      String?
+  departmentId String?
+  positionId   String?
+  managerId    String?
+  workStatus   WorkStatus @default(PROBATION)
+  joinDate     DateTime
+  exitDate     DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  deletedAt    DateTime?
+
+  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  department Department? @relation("DeptEmployees", fields: [departmentId], references: [id])
+  position   Position?   @relation(fields: [positionId], references: [id])
+  manager    Employee?   @relation("EmployeeManager", fields: [managerId], references: [id])
+  reports    Employee[]  @relation("EmployeeManager")
+
+  jobHistory     JobHistory[]
+  salaryHistory  SalaryHistory[]
+  documents      EmployeeDocument[]
+  faceProfiles   FaceProfile[]
+  attendances    Attendance[]
+  leaveRequests  LeaveRequest[]
+  leaveApprovals LeaveApproval[]
+  leaveBalances  LeaveBalance[]
+  projectMembers ProjectMember[]
+  taskAssignees  TaskAssignee[]
+  taskComments   TaskComment[]
+  reimbursements Reimbursement[]
+  expenses       Expense[]
+  interactions   Interaction[]
+  leads          Lead[]
+  opportunities  Opportunity[]
+
+  @@index([departmentId])
+  @@index([fullName])
+  @@map("employees")
+}
+
+model JobHistory {
+  id           String     @id @default(cuid())
+  employeeId   String
+  positionId   String?
+  departmentId String?
+  startDate    DateTime
+  endDate      DateTime?
+  note         String?
+  employee     Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  position     Position?   @relation(fields: [positionId], references: [id])
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  @@index([employeeId])
+  @@map("job_history")
+}
+
+model SalaryHistory {
+  id            String   @id @default(cuid())
+  employeeId    String
+  amount        Decimal  @db.Decimal(18, 2)
+  currency      String   @default("IDR")
+  effectiveDate DateTime
+  reason        String?
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("salary_history")
+}
+
+enum EmployeeDocType {
+  KTP
+  NPWP
+  CV
+  CONTRACT
+  OTHER
+}
+
+enum DocVerifyStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+model EmployeeDocument {
+  id         String          @id @default(cuid())
+  employeeId String
+  docType    EmployeeDocType
+  fileUrl    String
+  fileName   String
+  status     DocVerifyStatus @default(PENDING)
+  uploadedAt DateTime        @default(now())
+  employee   Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("employee_documents")
+}
+
+// =============================================================================
+// 3. ATTENDANCE & FACE RECOGNITION
+// =============================================================================
+
+model FaceProfile {
+  id             String   @id @default(cuid())
+  employeeId     String
+  embedding      Bytes // serialized Float32Array (128/512-d)
+  quality        Float    @default(0)
+  sampleImageUrl String?
+  isPrimary      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("face_profiles")
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  LEAVE
+  PERMIT
+  ABSENT
+}
+
+model Attendance {
+  id              String           @id @default(cuid())
+  employeeId      String
+  workDate        DateTime         @db.Date
+  checkInAt       DateTime?
+  checkOutAt      DateTime?
+  checkInLat      Float?
+  checkInLng      Float?
+  checkOutLat     Float?
+  checkOutLng     Float?
+  checkInPhotoUrl String?
+  checkOutPhotoUrl String?
+  deviceInfo      Json?
+  matchScore      Float?
+  livenessPassed  Boolean          @default(false)
+  status          AttendanceStatus @default(ABSENT)
+  createdAt       DateTime         @default(now())
+  employee        Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, workDate])
+  @@index([workDate])
+  @@map("attendances")
+}
+
+model WorkSchedule {
+  id           String @id @default(cuid())
+  name         String
+  startTime    String // "08:00"
+  endTime      String // "17:00"
+  graceMinutes Int    @default(15)
+
+  @@map("work_schedules")
+}
+
+// =============================================================================
+// 4. LEAVE MANAGEMENT
+// =============================================================================
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ApprovalDecision {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model LeaveType {
+  id           String  @id @default(cuid())
+  name         String // Cuti, Izin, Sakit
+  defaultQuota Int     @default(12)
+  requiresDoc  Boolean @default(false)
+
+  requests LeaveRequest[]
+  balances LeaveBalance[]
+
+  @@map("leave_types")
+}
+
+model LeaveRequest {
+  id          String      @id @default(cuid())
+  employeeId  String
+  leaveTypeId String
+  startDate   DateTime    @db.Date
+  endDate     DateTime    @db.Date
+  reason      String
+  documentUrl String?
+  status      LeaveStatus @default(PENDING)
+  currentStep Int         @default(1)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  employee  Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType LeaveType       @relation(fields: [leaveTypeId], references: [id])
+  approvals LeaveApproval[]
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("leave_requests")
+}
+
+model LeaveApproval {
+  id             String           @id @default(cuid())
+  leaveRequestId String
+  step           Int // 1=Supervisor, 2=Manager, 3=HR
+  role           String // SUPERVISOR | MANAGER | HR
+  approverId     String?
+  decision       ApprovalDecision @default(PENDING)
+  comment        String?
+  decidedAt      DateTime?
+  leaveRequest   LeaveRequest     @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+  approver       Employee?        @relation(fields: [approverId], references: [id])
+
+  @@index([leaveRequestId])
+  @@map("leave_approvals")
+}
+
+model LeaveBalance {
+  id          String    @id @default(cuid())
+  employeeId  String
+  leaveTypeId String
+  year        Int
+  allocated   Int       @default(0)
+  used        Int       @default(0)
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
+
+  @@unique([employeeId, leaveTypeId, year])
+  @@map("leave_balances")
+}
+
+// =============================================================================
+// 5. PROJECTS & TASKS
+// =============================================================================
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  DONE
+}
+
+model Project {
+  id            String        @id @default(cuid())
+  name          String
+  code          String        @unique
+  description   String?
+  status        ProjectStatus @default(PLANNING)
+  startDate     DateTime?
+  deadline      DateTime?
+  progress      Int           @default(0)
+  budgetPlanned Decimal       @default(0) @db.Decimal(18, 2)
+  budgetActual  Decimal       @default(0) @db.Decimal(18, 2)
+  managerId     String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  milestones Milestone[]
+  tasks      Task[]
+  members    ProjectMember[]
+
+  @@index([status])
+  @@map("projects")
+}
+
+model Milestone {
+  id        String   @id @default(cuid())
+  projectId String
+  title     String
+  dueDate   DateTime?
+  completed Boolean  @default(false)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+
+  @@index([projectId])
+  @@map("milestones")
+}
+
+model ProjectMember {
+  projectId  String
+  employeeId String
+  role       String?
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, employeeId])
+  @@map("project_members")
+}
+
+model Task {
+  id          String       @id @default(cuid())
+  projectId   String?
+  milestoneId String?
+  title       String
+  description String?
+  priority    TaskPriority @default(MEDIUM)
+  status      TaskStatus   @default(TODO)
+  dueDate     DateTime?
+  orderIndex  Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  project     Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  milestone   Milestone?       @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  assignees   TaskAssignee[]
+  checklist   ChecklistItem[]
+  comments    TaskComment[]
+  attachments TaskAttachment[]
+
+  @@index([projectId])
+  @@index([status])
+  @@map("tasks")
+}
+
+model TaskAssignee {
+  taskId     String
+  employeeId String
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, employeeId])
+  @@map("task_assignees")
+}
+
+model ChecklistItem {
+  id         String  @id @default(cuid())
+  taskId     String
+  label      String
+  done       Boolean @default(false)
+  orderIndex Int     @default(0)
+  task       Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("checklist_items")
+}
+
+model TaskComment {
+  id        String   @id @default(cuid())
+  taskId    String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author    Employee @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("task_comments")
+}
+
+model TaskAttachment {
+  id         String   @id @default(cuid())
+  taskId     String
+  fileUrl    String
+  fileName   String
+  uploadedAt DateTime @default(now())
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("task_attachments")
+}
+
+// =============================================================================
+// 6. FINANCE
+// =============================================================================
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PARTIAL
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum ExpenseStatus {
+  DRAFT
+  APPROVED
+  PAID
+}
+
+enum ReimbursementStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+model Invoice {
+  id         String        @id @default(cuid())
+  number     String        @unique
+  customerId String
+  issueDate  DateTime      @db.Date
+  dueDate    DateTime      @db.Date
+  subtotal   Decimal       @default(0) @db.Decimal(18, 2)
+  tax        Decimal       @default(0) @db.Decimal(18, 2)
+  total      Decimal       @default(0) @db.Decimal(18, 2)
+  status     InvoiceStatus @default(DRAFT)
+  createdAt  DateTime      @default(now())
+
+  customer Customer      @relation(fields: [customerId], references: [id])
+  items    InvoiceItem[]
+  payments Payment[]
+
+  @@index([status])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  description String
+  quantity    Decimal @default(1) @db.Decimal(18, 2)
+  unitPrice   Decimal @default(0) @db.Decimal(18, 2)
+  lineTotal   Decimal @default(0) @db.Decimal(18, 2)
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_items")
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  invoiceId String
+  amount    Decimal  @db.Decimal(18, 2)
+  method    String?
+  paidAt    DateTime @db.Date
+  reference String?
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("payments")
+}
+
+model ExpenseCategory {
+  id   String @id @default(cuid())
+  name String @unique // OPERATIONAL, PURCHASE, SALARY, REIMBURSEMENT
+
+  expenses Expense[]
+
+  @@map("expense_categories")
+}
+
+model Expense {
+  id           String          @id @default(cuid())
+  categoryId   String
+  title        String
+  amount       Decimal         @db.Decimal(18, 2)
+  spentAt      DateTime        @db.Date
+  recordedById String?
+  receiptUrl   String?
+  status       ExpenseStatus   @default(DRAFT)
+  createdAt    DateTime        @default(now())
+  category     ExpenseCategory @relation(fields: [categoryId], references: [id])
+  recordedBy   Employee?       @relation(fields: [recordedById], references: [id])
+
+  @@index([spentAt])
+  @@index([categoryId])
+  @@map("expenses")
+}
+
+model Reimbursement {
+  id         String              @id @default(cuid())
+  employeeId String
+  title      String
+  amount     Decimal             @db.Decimal(18, 2)
+  receiptUrl String?
+  status     ReimbursementStatus @default(PENDING)
+  approverId String?
+  createdAt  DateTime            @default(now())
+  employee   Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("reimbursements")
+}
+
+// =============================================================================
+// 7. INVENTORY
+// =============================================================================
+
+enum StockMovementType {
+  IN
+  OUT
+  ADJUST
+}
+
+model Category {
+  id       String     @id @default(cuid())
+  name     String
+  parentId String?
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  items    Item[]
+
+  @@map("categories")
+}
+
+model Supplier {
+  id          String  @id @default(cuid())
+  name        String
+  contactName String?
+  phone       String?
+  email       String?
+  address     String?
+  items       Item[]
+
+  @@map("suppliers")
+}
+
+model Warehouse {
+  id        String          @id @default(cuid())
+  name      String
+  location  String?
+  movements StockMovement[]
+
+  @@map("warehouses")
+}
+
+model Item {
+  id           String   @id @default(cuid())
+  sku          String   @unique
+  name         String
+  categoryId   String?
+  supplierId   String?
+  unit         String   @default("pcs")
+  reorderLevel Int      @default(0)
+  unitCost     Decimal  @default(0) @db.Decimal(18, 2)
+  barcode      String?
+  qrCodeUrl    String?
+  createdAt    DateTime @default(now())
+
+  category  Category?       @relation(fields: [categoryId], references: [id])
+  supplier  Supplier?       @relation(fields: [supplierId], references: [id])
+  movements StockMovement[]
+
+  @@index([name])
+  @@map("items")
+}
+
+model StockMovement {
+  id          String            @id @default(cuid())
+  itemId      String
+  warehouseId String
+  type        StockMovementType
+  quantity    Int
+  reference   String?
+  note        String?
+  createdAt   DateTime          @default(now())
+  item        Item              @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  warehouse   Warehouse         @relation(fields: [warehouseId], references: [id])
+
+  @@index([itemId])
+  @@index([warehouseId])
+  @@map("stock_movements")
+}
+
+// =============================================================================
+// 8. CRM
+// =============================================================================
+
+enum CustomerType {
+  PROSPECT
+  ACTIVE
+  CHURNED
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  LOST
+}
+
+model Customer {
+  id      String       @id @default(cuid())
+  name    String
+  company String?
+  email   String?
+  phone   String?
+  address String?
+  type    CustomerType @default(PROSPECT)
+  createdAt DateTime   @default(now())
+
+  interactions  Interaction[]
+  opportunities Opportunity[]
+  invoices      Invoice[]
+
+  @@index([name])
+  @@map("customers")
+}
+
+model Lead {
+  id      String     @id @default(cuid())
+  name    String
+  source  String?
+  email   String?
+  phone   String?
+  status  LeadStatus @default(NEW)
+  ownerId String?
+  createdAt DateTime @default(now())
+  owner   Employee?  @relation(fields: [ownerId], references: [id])
+
+  opportunities Opportunity[]
+
+  @@map("leads")
+}
+
+model PipelineStage {
+  id          String        @id @default(cuid())
+  name        String
+  orderIndex  Int           @default(0)
+  probability Int           @default(0)
+  opportunities Opportunity[]
+
+  @@map("pipeline_stages")
+}
+
+model Opportunity {
+  id            String         @id @default(cuid())
+  customerId    String?
+  leadId        String?
+  stageId       String
+  title         String
+  value         Decimal        @default(0) @db.Decimal(18, 2)
+  expectedClose DateTime?      @db.Date
+  ownerId       String?
+  createdAt     DateTime       @default(now())
+  customer      Customer?      @relation(fields: [customerId], references: [id])
+  lead          Lead?          @relation(fields: [leadId], references: [id])
+  stage         PipelineStage  @relation(fields: [stageId], references: [id])
+  owner         Employee?      @relation(fields: [ownerId], references: [id])
+
+  @@index([stageId])
+  @@map("opportunities")
+}
+
+model Interaction {
+  id         String   @id @default(cuid())
+  customerId String
+  type       String // CALL | EMAIL | MEETING | NOTE
+  summary    String
+  ownerId    String?
+  occurredAt DateTime @default(now())
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  owner      Employee? @relation(fields: [ownerId], references: [id])
+
+  @@index([customerId])
+  @@map("interactions")
+}
+
+// =============================================================================
+// 9. DOCUMENTS
+// =============================================================================
+
+enum DocType {
+  SOP
+  CONTRACT
+  INVOICE
+  LETTER
+  OTHER
+}
+
+enum ShareAccess {
+  VIEW
+  EDIT
+}
+
+model Folder {
+  id        String   @id @default(cuid())
+  name      String
+  parentId  String?
+  ownerId   String?
+  createdAt DateTime @default(now())
+  parent    Folder?  @relation("FolderTree", fields: [parentId], references: [id])
+  children  Folder[] @relation("FolderTree")
+  owner     User?    @relation(fields: [ownerId], references: [id])
+  documents Document[]
+
+  @@map("folders")
+}
+
+model Document {
+  id               String   @id @default(cuid())
+  folderId         String?
+  title            String
+  docType          DocType  @default(OTHER)
+  currentVersionId String?
+  ownerId          String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  folder   Folder?           @relation(fields: [folderId], references: [id])
+  owner    User?             @relation(fields: [ownerId], references: [id])
+  versions DocumentVersion[]
+  shares   DocumentShare[]
+
+  @@index([folderId])
+  @@map("documents")
+}
+
+model DocumentVersion {
+  id           String   @id @default(cuid())
+  documentId   String
+  version      Int
+  fileUrl      String
+  fileName     String
+  sizeBytes    Int      @default(0)
+  uploadedById String?
+  uploadedAt   DateTime @default(now())
+  document     Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id])
+
+  @@unique([documentId, version])
+  @@map("document_versions")
+}
+
+model DocumentShare {
+  id               String      @id @default(cuid())
+  documentId       String
+  sharedWithUserId String
+  access           ShareAccess @default(VIEW)
+  document         Document    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  sharedWith       User        @relation(fields: [sharedWithUserId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, sharedWithUserId])
+  @@map("document_shares")
+}
+
+// =============================================================================
+// 10. INTERNAL COMMUNICATION
+// =============================================================================
+
+enum ConversationType {
+  DIRECT
+  GROUP
+}
+
+enum AnnouncementAudience {
+  ALL
+  DEPARTMENT
+  ROLE
+}
+
+model Conversation {
+  id          String           @id @default(cuid())
+  type        ConversationType
+  name        String?
+  createdById String?
+  createdAt   DateTime         @default(now())
+
+  members  ConversationMember[]
+  messages Message[]
+
+  @@map("conversations")
+}
+
+model ConversationMember {
+  conversationId String
+  userId         String
+  lastReadAt     DateTime?
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@map("conversation_members")
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  senderId       String
+  body           String
+  createdAt      DateTime     @default(now())
+  editedAt       DateTime?
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  attachments MessageAttachment[]
+  mentions    MessageMention[]
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+model MessageAttachment {
+  id        String  @id @default(cuid())
+  messageId String
+  fileUrl   String
+  fileName  String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("message_attachments")
+}
+
+model MessageMention {
+  messageId String
+  userId    String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, userId])
+  @@map("message_mentions")
+}
+
+model Announcement {
+  id          String               @id @default(cuid())
+  authorId    String
+  title       String
+  body        String
+  audience    AnnouncementAudience @default(ALL)
+  targetRef   String? // departmentId or roleId when scoped
+  publishedAt DateTime             @default(now())
+  author      User                 @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@map("announcements")
+}

@@ -1,0 +1,9 @@
+{
+  "extends": "@nexus/config/tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "."
+  },
+  "include": ["src/**/*.ts", "seed.ts"],
+  "exclude": ["node_modules", "dist"]
+}

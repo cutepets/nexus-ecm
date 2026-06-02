@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body {
+    @apply bg-canvas text-ink antialiased;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-card border border-border bg-card shadow-card transition-shadow duration-200;
+  }
+  .card-hover {
+    @apply hover:shadow-card-hover;
+  }
+}
