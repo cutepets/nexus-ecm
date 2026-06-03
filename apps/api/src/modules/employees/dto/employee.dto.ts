@@ -29,6 +29,12 @@ export class CreateEmployeeDto {
   @IsEmail()
   email?: string;
 
+  @ApiProperty({ required: false, description: 'When set, provisions a login account (email + this password)' })
+  @IsOptional()
+  @IsString()
+  @MinLength(6)
+  password?: string;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()

@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import * as argon2 from 'argon2';
 import { Prisma } from '@nexus/database';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { StorageService } from '../../core/storage/storage.service';
@@ -99,9 +100,13 @@ export class EmployeesService {
     const clash = await this.prisma.employee.findUnique({ where: { employeeNo } });
     if (clash) throw new BadRequestException('Employee number already exists');
 
+    // Optionally provision a login account (email + password → EMPLOYEE role).
+    const userId = dto.password ? await this.createLoginAccount(dto.email, dto.password, dto.fullName) : undefined;
+
     const employee = await this.prisma.employee.create({
       data: {
         employeeNo,
+        userId,
         fullName: dto.fullName,
         email: dto.email,
         phone: dto.phone,
@@ -142,10 +147,12 @@ export class EmployeesService {
       if (clash) throw new BadRequestException('Employee number already exists');
     }
 
+    // `password` is not an Employee column — strip it (account changes aren't handled here).
+    const { password: _password, ...employeeData } = dto;
     const employee = await this.prisma.employee.update({
       where: { id },
       data: {
-        ...dto,
+        ...employeeData,
         joinDate: dto.joinDate ? new Date(dto.joinDate) : undefined,
         exitDate: dto.exitDate ? new Date(dto.exitDate) : undefined,
       },
@@ -248,6 +255,25 @@ export class EmployeesService {
   }
 
   // ---- Helpers ----
+
+  /** Create a login account (User + EMPLOYEE role) for a new employee. Returns the user id. */
+  private async createLoginAccount(email: string | undefined, password: string, fullName: string): Promise<string> {
+    if (!email) throw new BadRequestException('Email wajib diisi untuk membuat akun login');
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing) throw new BadRequestException('Email sudah digunakan oleh akun lain');
+
+    const role = await this.prisma.role.findUnique({ where: { name: 'EMPLOYEE' } });
+    const user = await this.prisma.user.create({
+      data: {
+        email,
+        passwordHash: await argon2.hash(password, { type: argon2.argon2id }),
+        fullName,
+        isActive: true,
+        roles: role ? { create: { roleId: role.id } } : undefined,
+      },
+    });
+    return user.id;
+  }
 
   private async ensureExists(id: string) {
     const exists = await this.prisma.employee.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
