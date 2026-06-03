@@ -49,6 +49,19 @@ export function useAttendanceList(date?: string) {
   });
 }
 
+export interface MyAttendanceSummary {
+  counts: Record<string, number>;
+  today: { checkInAt?: string | null; checkOutAt?: string | null; status: string } | null;
+  enrolled: boolean;
+}
+
+export function useMyAttendanceSummary() {
+  return useQuery({
+    queryKey: ['attendance', 'me-summary'],
+    queryFn: async () => (await api.get<MyAttendanceSummary>('/attendance/me/summary')).data,
+  });
+}
+
 export function useAttendanceSummary(date?: string) {
   return useQuery({
     queryKey: keys.summary(date),

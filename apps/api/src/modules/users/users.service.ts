@@ -3,6 +3,7 @@ import { PrismaService } from '../../core/prisma/prisma.service';
 
 const userWithRoles = {
   roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
+  employee: { select: { id: true } },
 } as const;
 
 export interface ResolvedUser {
@@ -14,6 +15,7 @@ export interface ResolvedUser {
   isActive: boolean;
   roles: string[];
   permissions: string[];
+  employeeId: string | null;
 }
 
 @Injectable()
@@ -55,6 +57,7 @@ export class UsersService {
       isActive: user.isActive,
       roles,
       permissions,
+      employeeId: user.employee?.id ?? null,
     };
   }
 }

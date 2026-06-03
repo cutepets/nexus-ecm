@@ -76,6 +76,7 @@ export class LeaveService {
   }
 
   async create(dto: CreateLeaveRequestDto, ctx: AuditContext) {
+    if (!dto.employeeId) throw new BadRequestException('employeeId is required');
     const employee = await this.prisma.employee.findFirst({
       where: { id: dto.employeeId, deletedAt: null },
       select: { id: true, fullName: true, managerId: true },

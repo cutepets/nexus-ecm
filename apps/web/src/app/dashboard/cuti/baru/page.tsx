@@ -12,13 +12,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { EmployeeSelect } from '@/features/attendance/employee-select';
 import { useLeaveTypes, useCreateLeave, uploadLeaveDoc } from '@/features/leave/api';
+import { useAuthStore } from '@/stores/auth-store';
 
 export default function NewLeavePage() {
   const router = useRouter();
   const { data: types } = useLeaveTypes();
   const create = useCreateLeave();
 
-  const [employeeId, setEmployeeId] = useState('');
+  // Managers/HR may file on behalf of others; employees auto-file for themselves.
+  const canManage = useAuthStore((s) => s.hasPermission('leave:approve'));
+  const ownEmployeeId = useAuthStore((s) => s.user?.employeeId);
+  const [picked, setPicked] = useState('');
+  const employeeId = canManage ? picked : ownEmployeeId ?? '';
+  const setEmployeeId = setPicked;
   const [leaveTypeId, setLeaveTypeId] = useState('');
   const [uploading, setUploading] = useState(false);
   const [docKey, setDocKey] = useState<string | null>(null);
@@ -43,7 +49,7 @@ export default function NewLeavePage() {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     if (!employeeId || !leaveTypeId) {
-      toast.error('Pilih karyawan dan jenis cuti');
+      toast.error(canManage ? 'Pilih karyawan dan jenis cuti' : 'Pilih jenis cuti');
       return;
     }
     create.mutate(
@@ -65,9 +71,11 @@ export default function NewLeavePage() {
       <form onSubmit={onSubmit} className="mx-auto max-w-2xl space-y-6">
         <div className="rounded-card border border-border bg-card p-6 shadow-card">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <EmployeeSelect value={employeeId} onChange={setEmployeeId} />
-            </div>
+            {canManage && (
+              <div className="sm:col-span-2">
+                <EmployeeSelect value={picked} onChange={setEmployeeId} />
+              </div>
+            )}
             <div>
               <Label>Jenis Cuti</Label>
               <Select value={leaveTypeId} onChange={(e) => setLeaveTypeId(e.target.value)}>

@@ -6,7 +6,7 @@ import { api } from '@/lib/api-client';
 
 export interface ChatUser { id: string; fullName: string; email: string }
 export interface Message {
-  id: string; body: string; senderId: string; createdAt: string;
+  id: string; body: string; senderId: string; conversationId: string; createdAt: string;
   sender: { id: string; fullName: string };
 }
 export interface Conversation {
@@ -43,6 +43,15 @@ export function useCreateConversation() {
     onError: (e) => toast.error(errMsg(e, 'Gagal membuat percakapan')),
   });
 }
+/** Mark a conversation read → clears its unread badge in the conversation list. */
+export function useMarkConversationRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (conversationId: string) => (await api.post(`/chat/conversations/${conversationId}/read`)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['chat', 'conversations'] }),
+  });
+}
+
 export function useCreateAnnouncement() {
   const qc = useQueryClient();
   return useMutation({

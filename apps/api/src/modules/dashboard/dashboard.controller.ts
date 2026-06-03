@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DashboardService } from './dashboard.service';
 import { NotificationsService } from './notifications.service';
 import { SearchService } from './search.service';
+import { CalendarService } from './calendar.service';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { CurrentUser, RequestUser } from '../../common/decorators/current-user.decorator';
 
@@ -14,6 +15,7 @@ export class DashboardController {
     private readonly dashboard: DashboardService,
     private readonly notifications: NotificationsService,
     private readonly search: SearchService,
+    private readonly calendar: CalendarService,
   ) {}
 
   // ---- Dashboard ----
@@ -22,6 +24,14 @@ export class DashboardController {
   @ApiOperation({ summary: 'Executive KPI summary' })
   summary() {
     return this.dashboard.summary();
+  }
+
+  // ---- Shared calendar ----
+  @Get('calendar')
+  @RequirePermissions('dashboard:read')
+  @ApiOperation({ summary: 'Company calendar: deadlines, leaves, milestones, holidays' })
+  calendarEvents(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.calendar.events(from, to);
   }
 
   @Get('dashboard/activity')

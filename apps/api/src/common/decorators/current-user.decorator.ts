@@ -5,6 +5,12 @@ export interface RequestUser {
   email: string;
   roles: string[];
   permissions: string[];
+  employeeId?: string | null;
+}
+
+/** True when the user may manage others' data (not a self-service-only employee). */
+export function isPrivileged(user: RequestUser, managePermission: string): boolean {
+  return user.roles.includes('SUPER_ADMIN') || user.permissions.includes(managePermission);
 }
 
 /** Injects the authenticated user (set by JwtStrategy) into a handler param. */

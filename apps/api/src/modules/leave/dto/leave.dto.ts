@@ -2,9 +2,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsDateString, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class CreateLeaveRequestDto {
-  @ApiProperty()
+  @ApiProperty({ required: false, description: 'Omitted by employees — auto-filled with their own id' })
+  @IsOptional()
   @IsString()
-  employeeId!: string;
+  employeeId?: string;
 
   @ApiProperty()
   @IsString()

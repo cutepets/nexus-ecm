@@ -115,6 +115,21 @@ export function useAddPayment(invoiceId: string) {
   });
 }
 
+/** Manually set invoice status (DRAFT / SENT / VOID). PAID/PARTIAL are payment-derived. */
+export function useSetInvoiceStatus(invoiceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (status: 'DRAFT' | 'SENT' | 'VOID') =>
+      (await api.put(`/finance/invoices/${invoiceId}/status`, { status })).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+      qc.invalidateQueries({ queryKey: ['finance'] });
+      toast.success('Status faktur diperbarui');
+    },
+    onError: (e) => toast.error(errMsg(e, 'Gagal mengubah status')),
+  });
+}
+
 // ---- Expenses ----
 export function useExpenses(status?: string) {
   return useQuery({

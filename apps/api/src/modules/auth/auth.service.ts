@@ -100,6 +100,7 @@ export class AuthService {
       email: user.email,
       roles: user.roles,
       permissions: user.permissions,
+      employeeId: user.employeeId,
     };
 
     const accessToken = await this.jwt.signAsync(accessPayload, {
@@ -144,6 +145,7 @@ export class AuthService {
       avatarUrl: user.avatarUrl,
       roles: user.roles,
       permissions: user.permissions,
+      employeeId: user.employeeId,
     };
   }
 

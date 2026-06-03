@@ -20,6 +20,7 @@ import {
   useCreateConversation,
   useAnnouncements,
   useCreateAnnouncement,
+  useMarkConversationRead,
   type Message,
 } from '@/features/chat/api';
 import { useChatSocket } from '@/features/chat/use-chat-socket';
@@ -52,14 +53,24 @@ function ChatView() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
+  const markRead = useMarkConversationRead();
 
   const socket = useChatSocket({
-    onMessage: (m) => setMessages((prev) => (prev.some((p) => p.id === m.id) ? prev : [...prev, m])),
+    onMessage: (m) => {
+      setMessages((prev) => (prev.some((p) => p.id === m.id) ? prev : [...prev, m]));
+      // If we're viewing this conversation, immediately mark it read.
+      if (m.conversationId === activeId && m.senderId !== me?.id) markRead.mutate(activeId);
+    },
     onConversationUpdated: () => refetch(),
   });
 
   useEffect(() => { if (serverMessages) setMessages(serverMessages); }, [serverMessages]);
-  useEffect(() => { if (activeId) socket.joinConversation(activeId); }, [activeId, socket]);
+  useEffect(() => {
+    if (!activeId) return;
+    socket.joinConversation(activeId);
+    markRead.mutate(activeId); // opening a conversation clears its unread badge
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const send = () => {

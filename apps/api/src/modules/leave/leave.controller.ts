@@ -1,9 +1,9 @@
-import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { LeaveService } from './leave.service';
 import { CreateLeaveRequestDto, DecisionDto, LeaveQueryDto, PresignLeaveDocDto } from './dto/leave.dto';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
-import { CurrentUser, RequestUser } from '../../common/decorators/current-user.decorator';
+import { CurrentUser, RequestUser, isPrivileged } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('leave')
 @ApiBearerAuth()
@@ -34,8 +34,11 @@ export class LeaveController {
 
   @Get('requests')
   @RequirePermissions('leave:read')
-  @ApiOperation({ summary: 'List leave requests (filter by employee/status)' })
-  list(@Query() query: LeaveQueryDto) {
+  @ApiOperation({ summary: 'List leave requests (employees see only their own)' })
+  list(@Query() query: LeaveQueryDto, @CurrentUser() user: RequestUser) {
+    if (!isPrivileged(user, 'leave:approve')) {
+      return this.leave.list({ ...query, employeeId: user.employeeId ?? '__none__' });
+    }
     return this.leave.list(query);
   }
 
@@ -55,8 +58,12 @@ export class LeaveController {
 
   @Post('requests')
   @RequirePermissions('leave:create')
-  @ApiOperation({ summary: 'Submit a leave request' })
+  @ApiOperation({ summary: 'Submit a leave request (employees auto-submit for themselves)' })
   create(@Body() dto: CreateLeaveRequestDto, @CurrentUser() user: RequestUser) {
+    if (!isPrivileged(user, 'leave:approve')) {
+      if (!user.employeeId) throw new ForbiddenException('Akun Anda tidak tertaut ke data karyawan');
+      return this.leave.create({ ...dto, employeeId: user.employeeId }, { actorId: user.id });
+    }
     return this.leave.create(dto, { actorId: user.id });
   }
 

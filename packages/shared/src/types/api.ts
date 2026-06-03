@@ -33,4 +33,6 @@ export interface AuthUser {
   avatarUrl?: string | null;
   roles: string[];
   permissions: string[];
+  /** Linked Employee id, when this user is also an employee (self-service). */
+  employeeId?: string | null;
 }

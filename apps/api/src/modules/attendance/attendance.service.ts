@@ -92,9 +92,11 @@ export class AttendanceService {
     return { ...record, employee: { id: employee.id, fullName: employee.fullName }, matchScore };
   }
 
-  async list(query: AttendanceQueryDto) {
+  async list(query: AttendanceQueryDto, scopeEmployeeId?: string | null) {
     const where: Prisma.AttendanceWhereInput = {};
-    if (query.employeeId) where.employeeId = query.employeeId;
+    // Non-privileged users are locked to their own records.
+    if (scopeEmployeeId) where.employeeId = scopeEmployeeId;
+    else if (query.employeeId) where.employeeId = query.employeeId;
     if (query.status) where.status = query.status as Prisma.AttendanceWhereInput['status'];
     if (query.date) {
       where.workDate = this.dateOnly(new Date(query.date));
@@ -129,6 +131,28 @@ export class AttendanceService {
     counts.ABSENT = Math.max(counts.ABSENT, totalActive - recorded);
 
     return { date: workDate.toISOString().slice(0, 10), totalActive, counts };
+  }
+
+  /** Personal month-to-date attendance stats for the self-service dashboard. */
+  async myMonthSummary(employeeId: string) {
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const grouped = await this.prisma.attendance.groupBy({
+      by: ['status'],
+      where: { employeeId, workDate: { gte: monthStart } },
+      _count: { _all: true },
+    });
+    const counts: Record<string, number> = { PRESENT: 0, LATE: 0, LEAVE: 0, PERMIT: 0, ABSENT: 0 };
+    for (const g of grouped) counts[g.status] = g._count._all;
+
+    const workDate = this.dateOnly(now);
+    const today = await this.prisma.attendance.findUnique({
+      where: { employeeId_workDate: { employeeId, workDate } },
+      select: { checkInAt: true, checkOutAt: true, status: true },
+    });
+    const enrolled = (await this.prisma.faceProfile.count({ where: { employeeId } })) > 0;
+
+    return { counts, today, enrolled };
   }
 
   // ---- internals ----

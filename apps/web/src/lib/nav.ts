@@ -3,6 +3,7 @@ import {
   Users,
   Fingerprint,
   CalendarOff,
+  CalendarDays,
   FolderKanban,
   ListTodo,
   Wallet,
@@ -24,6 +25,7 @@ export interface NavItem {
 /** Primary sidebar navigation. Order follows the product roadmap (docs/05-ROADMAP.md). */
 export const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Kalender', href: '/dashboard/kalender', icon: CalendarDays },
   { label: 'Karyawan', href: '/dashboard/karyawan', icon: Users, permission: 'employee:read' },
   { label: 'Absensi', href: '/dashboard/absensi', icon: Fingerprint, permission: 'attendance:read' },
   { label: 'Cuti', href: '/dashboard/cuti', icon: CalendarOff, permission: 'leave:read' },

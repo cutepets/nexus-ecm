@@ -8,26 +8,62 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { ChevronDown, CheckCircle2 } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import { useInvoice, useAddPayment } from '@/features/finance/api';
+import { useInvoice, useAddPayment, useSetInvoiceStatus } from '@/features/finance/api';
 
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data, isLoading } = useInvoice(id);
   const addPayment = useAddPayment(id);
+  const setStatus = useSetInvoiceStatus(id);
   const [amount, setAmount] = useState('');
   const [paidAt, setPaidAt] = useState('');
 
   if (isLoading || !data) return <Skeleton className="h-96 w-full rounded-card" />;
 
   const remaining = Number(data.total) - Number(data.paid);
+  const today = new Date().toISOString().slice(0, 10);
+  const isClosed = data.status === 'PAID' || data.status === 'VOID';
+
+  // Mark fully paid by recording a payment for the remaining balance.
+  const markPaid = () => addPayment.mutate({ amount: String(remaining), paidAt: today });
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={data.number}
         description={data.customer.name}
-        action={<StatusBadge status={data.status} />}
+        action={
+          <div className="flex items-center gap-2">
+            <StatusBadge status={data.status} />
+            {remaining > 0 && data.status !== 'VOID' && (
+              <Button size="sm" onClick={markPaid} disabled={addPayment.isPending}>
+                <CheckCircle2 /> Tandai Lunas
+              </Button>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="secondary" disabled={isClosed}>
+                  Ubah Status <ChevronDown />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setStatus.mutate('DRAFT')}>Tandai Draft</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setStatus.mutate('SENT')}>Tandai Terkirim (Sent)</DropdownMenuItem>
+                <DropdownMenuItem className="text-red-600 focus:text-red-700" onSelect={() => setStatus.mutate('VOID')}>
+                  Batalkan (Void)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        }
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
