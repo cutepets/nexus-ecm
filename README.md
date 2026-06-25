@@ -24,6 +24,8 @@ A modern, full-featured, **100% open-source** management platform for medium-to-
 - **11 functional modules** + executive dashboard — a complete back-office in a single deployment.
 - **Browser-based AI face recognition** for attendance — no paid cloud vision API, biometrics never leave the device.
 - **Realtime chat** over Socket.IO (presence, typing, read receipts, @mentions, announcements).
+- **Employee self-service** — scoped dashboard, attendance & leave for each employee, plus a shared company calendar.
+- **Auto login provisioning** — creating an employee provisions their account (email + password) in one step.
 - **Enterprise cross-cutting**: RBAC, full audit log, in-app notifications, global search, PDF/Excel reporting.
 - **100% free / self-hostable stack** — Postgres, Redis, MinIO, all open source.
 - **Production-ready**: multi-stage Docker images, `docker-compose.prod.yml`, health probes, deployment + pen-test guide.
@@ -44,7 +46,8 @@ A modern, full-featured, **100% open-source** management platform for medium-to-
 | 8 | **Inventory** | Items, categories, suppliers, warehouses, stock ledger (In/Out/Adjust), QR codes, low-stock alerts |
 | 9 | **CRM** | Customers, leads, interactions, opportunities, **pipeline board** + funnel |
 | 10 | **Documents** | Folder tree, version control, internal sharing, type tags (MinIO presigned URLs) |
-| 11 | **Chat** | Realtime direct & group messaging, mentions, company announcements |
+| 11 | **Chat** | Realtime direct & group messaging, mentions, read receipts, company announcements |
+| ⊹ | **Self-service** | Per-employee dashboard, attendance & leave, shared company calendar |
 | ⊹ | **Cross-cutting** | RBAC, Audit Log viewer, Notification Center, Global Search (⌘K) |
 
 ---
