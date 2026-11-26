@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
   // tracing constrained to this application repository.
   outputFileTracingRoot: path.join(__dirname, '../..'),
   experimental: {
-    optimizePackageImports: ['lucide-react', 'recharts'],
+    optimizePackageImports: ['lucide-react'],
   },
   async rewrites() {
     return [
