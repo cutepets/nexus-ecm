@@ -12,16 +12,6 @@ export const CHALLENGE_LABEL: Record<LivenessChallenge, string> = {
   smile: "Mỉm cười, rồi trở lại nét mặt bình thường",
 };
 
-export function randomChallenge(): LivenessChallenge {
-  const challenges: LivenessChallenge[] = [
-    "blink",
-    "turnLeft",
-    "turnRight",
-    "smile",
-  ];
-  return challenges[Math.floor(Math.random() * challenges.length)];
-}
-
 type FaceMetrics = { eyeRatio: number; noseOffset: number; happiness: number };
 const distance = (a: { x: number; y: number }, b: { x: number; y: number }) =>
   Math.hypot(a.x - b.x, a.y - b.y);

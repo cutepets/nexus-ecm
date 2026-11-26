@@ -14,7 +14,5 @@ const currency = new Intl.NumberFormat('vi-VN', {
 
 export const formatCurrency = (value: number) => currency.format(value);
 
-export const formatNumber = (value: number) => new Intl.NumberFormat('vi-VN').format(value);
-
 export const formatDate = (value: string | Date) =>
   new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium' }).format(new Date(value));

@@ -26,7 +26,3 @@ export async function loadModels(): Promise<void> {
   ]);
   modelsLoaded = true;
 }
-
-export function areModelsLoaded() {
-  return modelsLoaded;
-}
