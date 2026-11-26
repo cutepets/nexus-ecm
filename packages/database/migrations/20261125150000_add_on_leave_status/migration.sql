@@ -1,0 +1,1 @@
+ALTER TYPE "WorkStatus" ADD VALUE 'ON_LEAVE';

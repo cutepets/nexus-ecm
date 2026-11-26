@@ -65,7 +65,7 @@ export function KpiCard({
         >
           {delta >= 0 ? <ArrowUpRight className="size-3.5" /> : <ArrowDownRight className="size-3.5" />}
           {Math.abs(delta)}%
-          <span className="text-ink-subtle">vs bulan lalu</span>
+          <span className="text-ink-subtle">so với tháng trước</span>
         </div>
       )}
     </div>

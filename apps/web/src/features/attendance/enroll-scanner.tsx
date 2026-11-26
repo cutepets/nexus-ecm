@@ -11,14 +11,14 @@ import { useEnrollFace } from './api';
 
 const TARGET_FRAMES = 5;
 
-export function EnrollScanner({ employeeId }: { employeeId: string }) {
+export function EnrollScanner({ employeeId, onComplete }: { employeeId: string; onComplete?: () => void }) {
   const router = useRouter();
   const { videoRef, ready, error, capturePhoto } = useFaceCamera();
   const enroll = useEnrollFace();
 
   const [capturing, setCapturing] = useState(false);
   const [count, setCount] = useState(0);
-  const [hint, setHint] = useState('Tekan mulai untuk merekam beberapa sampel wajah');
+  const [hint, setHint] = useState('Nhấn bắt đầu để ghi nhận một số mẫu khuôn mặt');
   const descriptorsRef = useRef<number[][]>([]);
   const rafRef = useRef<number | null>(null);
 
@@ -34,13 +34,13 @@ export function EnrollScanner({ employeeId }: { employeeId: string }) {
       }
       const detection = await detectSingleFace(video);
       if (!detection) {
-        setHint('Wajah tidak terdeteksi');
+        setHint('Không nhận diện được khuôn mặt');
         rafRef.current = requestAnimationFrame(tick);
         return;
       }
       const quality = checkQuality(detection);
       if (!quality.ok) {
-        setHint(quality.reason ?? 'Perbaiki posisi wajah');
+        setHint(quality.reason ?? 'Hãy điều chỉnh lại vị trí khuôn mặt');
         rafRef.current = requestAnimationFrame(tick);
         return;
       }
@@ -55,7 +55,7 @@ export function EnrollScanner({ employeeId }: { employeeId: string }) {
         const sampleImage = capturePhoto() ?? undefined;
         enroll.mutate(
           { employeeId, embeddings: descriptorsRef.current, sampleImage },
-          { onSuccess: () => setHint('Pendaftaran selesai!') },
+          { onSuccess: () => setHint('Đăng ký hoàn tất!') },
         );
         return;
       }
@@ -93,7 +93,7 @@ export function EnrollScanner({ employeeId }: { employeeId: string }) {
         {!capturing && !done && (
           <Button onClick={start} disabled={!ready || enroll.isPending}>
             {ready ? <ScanFace /> : <Loader2 className="animate-spin" />}
-            {enroll.isPending ? 'Menyimpan…' : ready ? 'Mulai Pindai' : 'Memuat model…'}
+            {enroll.isPending ? 'Đang lưu…' : ready ? 'Bắt đầu quét' : 'Đang tải mô hình…'}
           </Button>
         )}
         {capturing && (
@@ -101,7 +101,7 @@ export function EnrollScanner({ employeeId }: { employeeId: string }) {
             <Loader2 className="animate-spin" /> Merekam {count}/{TARGET_FRAMES}
           </Button>
         )}
-        {done && <Button onClick={() => router.push('/dashboard/absensi')}>Selesai</Button>}
+        {done && <Button onClick={() => onComplete ? onComplete() : router.push('/dashboard/absensi')}>Hoàn tất</Button>}
       </div>
     </div>
   );

@@ -20,7 +20,7 @@ export async function detectSingleFace(
   input: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement,
 ): Promise<FaceDetection | null> {
   const faceapi = await getFaceApi();
-  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.35 });
 
   const results = await faceapi
     .detectAllFaces(input, options)

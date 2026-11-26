@@ -17,6 +17,9 @@ export class CryptoService {
       this.key = Buffer.from(raw, 'hex');
     } else {
       this.logger.warn('FACE_ENCRYPTION_KEY is not 64 hex chars — deriving a key via SHA-256.');
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('FACE_ENCRYPTION_KEY phải là khóa hex 64 ký tự khi chạy production');
+      }
       this.key = createHash('sha256').update(raw || 'nexus-default-key').digest();
     }
   }

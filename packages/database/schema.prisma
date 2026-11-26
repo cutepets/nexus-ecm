@@ -24,16 +24,21 @@ datasource db {
 // =============================================================================
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  passwordHash String
-  fullName     String
-  avatarUrl    String?
-  isActive     Boolean   @default(true)
-  lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  deletedAt    DateTime?
+  id                 String    @id @default(cuid())
+  username           String    @unique
+  email              String    @unique
+  phone              String?   @unique
+  passwordHash       String
+  fullName           String
+  avatarUrl          String?
+  avatarPortraitUrl  String?
+  avatarCropUrl      String?
+  isActive           Boolean   @default(true)
+  mustChangePassword Boolean   @default(false)
+  lastLoginAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
 
   employee       Employee?
   roles          UserRole[]
@@ -55,7 +60,7 @@ model User {
 
 model Role {
   id          String  @id @default(cuid())
-  name        String  @unique // SUPER_ADMIN, HR, FINANCE, MANAGER, EMPLOYEE, or custom
+  name        String  @unique // ADMIN, HR, MANAGER, EMPLOYEE, or custom
   description String?
   isSystem    Boolean @default(false)
 
@@ -67,7 +72,7 @@ model Role {
 
 model Permission {
   id          String  @id @default(cuid())
-  key         String  @unique // e.g. "employee:create", "finance:report:read"
+  key         String  @unique // e.g. "employee:create", "attendance:report:read"
   module      String
   description String?
 
@@ -163,6 +168,109 @@ model Notification {
   @@map("notifications")
 }
 
+/// Singleton company-wide configuration. The fixed id `default` keeps this
+/// deployment ready for future tenant support without needing a lookup today.
+model CompanySetting {
+  id           String   @id @default("default")
+  companyName  String   @default("Nexus ECM")
+  logoKey      String?
+  locale       String   @default("vi-VN")
+  timezone     String   @default("Asia/Ho_Chi_Minh")
+  currency     String   @default("VND")
+  weekStartsOn Int      @default(1) // 0 = Sunday, 1 = Monday
+  requireGps       Boolean @default(true)
+  livenessMode     LivenessMode @default(RANDOM)
+  faceMatchThreshold Float @default(0.55)
+  faceDuplicateThreshold Float @default(0.43)
+  auditRetentionDays Int @default(90)
+  rosterAutoGenerateEnabled Boolean @default(true)
+  rosterGenerationDay Int @default(20)
+  employmentTypes String[] @default(["VAN_PHONG", "CUA_HANG_POS", "CONG_TRUONG", "TU_XA", "CA_KIP"])
+  payrollMode PayrollMode @default(MONTHLY)
+  workUnitMode WorkUnitMode @default(DAILY)
+  payrollCutoffDay Int @default(25)
+  timesheetStartDay Int @default(26)
+  timesheetEndDay Int @default(25)
+  roundingMinutes Int @default(15)
+  latePenaltyPerMinute Decimal @default(0) @db.Decimal(18, 2)
+  missingPunchPenalty Decimal @default(0) @db.Decimal(18, 2)
+  overtimeTriggerMinutes Int @default(15)
+  overtimeMultiplier Float @default(1.5)
+  integrationApiEnabled Boolean @default(false)
+  integrationAllowedOrigins String[] @default([])
+  trustedWebOrigins String[] @default(["https://chamcong.petshophanoi.com"])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("company_settings")
+}
+
+enum LivenessMode {
+  NONE
+  BLINK
+  TURN_HEAD
+  RANDOM
+  SMILE
+  THUMB_UP
+  PEACE
+}
+
+enum PayrollMode {
+  MONTHLY
+  HOURLY
+  SHIFT
+  HYBRID
+}
+
+enum WorkUnitMode {
+  DAILY
+  HOURLY
+}
+
+model Branch {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  name          String
+  address       String?
+  latitude      Float
+  longitude     Float
+  radiusMeters  Int      @default(100)
+  isActive      Boolean  @default(true)
+  displayOrder  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  locations     BranchLocation[]
+  assignments   EmployeeBranchAssignment[]
+  rosterSegments EmployeeDailyScheduleSegment[]
+  primaryEmployees Employee[] @relation("PrimaryEmployeeBranch")
+
+  @@index([isActive, displayOrder])
+  @@map("branches")
+}
+
+model BranchLocation {
+  id          String   @id @default(cuid())
+  branchId    String
+  code        String   @unique
+  name        String
+  address     String?
+  latitude    Float
+  longitude   Float
+  radiusMeters Int     @default(100)
+  allowRemote Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  branch      Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  checkIns    Attendance[] @relation("CheckInLocation")
+  checkOuts   Attendance[] @relation("CheckOutLocation")
+
+  @@index([branchId, isActive])
+  @@map("branch_locations")
+}
+
 // =============================================================================
 // 2. EMPLOYEE / HR
 // =============================================================================
@@ -171,6 +279,7 @@ enum WorkStatus {
   PROBATION
   PERMANENT
   CONTRACT
+  ON_LEAVE
   INACTIVE
 }
 
@@ -203,31 +312,48 @@ model Position {
 
 model Employee {
   id           String     @id @default(cuid())
-  userId       String?    @unique
+  userId       String     @unique
   employeeNo   String     @unique
   fullName     String
+  jobTitle     String     @default("Nhân viên")
   photoUrl     String?
   email        String?
   phone        String?
   address      String?
+    gender       String?
+    dateOfBirth  DateTime?
+    identityCode String?    @unique
+    emergencyContactName  String?
+    emergencyContactPhone String?
+    taxCode      String?
+    salaryBankName    String?
+    salaryBankAccount String?
+  basicSalary       Decimal?  @db.Decimal(18, 2)
+  spaBonusPercent   Decimal?  @db.Decimal(5, 2)
+  employmentType    EmploymentType @default(FULL_TIME)
+  primaryBranchId   String?
   departmentId String?
   positionId   String?
   managerId    String?
   workStatus   WorkStatus @default(PROBATION)
   joinDate     DateTime
   exitDate     DateTime?
+  terminatedAt DateTime?
+  terminationReason String?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   deletedAt    DateTime?
 
-  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Restrict)
   department Department? @relation("DeptEmployees", fields: [departmentId], references: [id])
   position   Position?   @relation(fields: [positionId], references: [id])
+  primaryBranch Branch? @relation("PrimaryEmployeeBranch", fields: [primaryBranchId], references: [id])
   manager    Employee?   @relation("EmployeeManager", fields: [managerId], references: [id])
   reports    Employee[]  @relation("EmployeeManager")
 
   jobHistory     JobHistory[]
   salaryHistory  SalaryHistory[]
+  employmentHistory EmploymentHistory[]
   documents      EmployeeDocument[]
   faceProfiles   FaceProfile[]
   attendances    Attendance[]
@@ -237,15 +363,40 @@ model Employee {
   projectMembers ProjectMember[]
   taskAssignees  TaskAssignee[]
   taskComments   TaskComment[]
-  reimbursements Reimbursement[]
-  expenses       Expense[]
-  interactions   Interaction[]
-  leads          Lead[]
-  opportunities  Opportunity[]
+  branchAssignments EmployeeBranchAssignment[]
+  workScheduleAssignments EmployeeWorkScheduleAssignment[]
+  workScheduleOverrides EmployeeScheduleOverride[]
+  dailySchedules EmployeeDailySchedule[]
+  timesheetEntries TimesheetEntry[]
+  attendanceCorrectionRequests AttendanceCorrectionRequest[]
+  overtimeRequests AttendanceOvertimeRequest[]
 
   @@index([departmentId])
+  @@index([primaryBranchId])
   @@index([fullName])
   @@map("employees")
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+}
+
+model EmployeeBranchAssignment {
+  id            String   @id @default(cuid())
+  employeeId    String
+  branchId      String
+  effectiveFrom DateTime @db.Date
+  effectiveTo   DateTime? @db.Date
+  allowRemote   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  branch   Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, branchId, effectiveFrom])
+  @@index([employeeId, effectiveFrom, effectiveTo])
+  @@map("employee_branch_assignments")
 }
 
 model JobHistory {
@@ -277,6 +428,26 @@ model SalaryHistory {
   @@map("salary_history")
 }
 
+/// A durable employment milestone for changes to the employee's long-term terms.
+/// Daily roster edits remain in the roster tables and do not create these records.
+model EmploymentHistory {
+  id             String   @id @default(cuid())
+  employeeId     String
+  effectiveDate  DateTime @db.Date
+  changeType     String
+  reason         String?
+  decisionNumber String?
+  changes        Json
+  createdById    String?
+  createdAt      DateTime @default(now())
+
+  employee  Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  documents EmployeeDocument[]
+
+  @@index([employeeId, effectiveDate])
+  @@map("employment_history")
+}
+
 enum EmployeeDocType {
   KTP
   NPWP
@@ -299,9 +470,12 @@ model EmployeeDocument {
   fileName   String
   status     DocVerifyStatus @default(PENDING)
   uploadedAt DateTime        @default(now())
+  historyId  String?
   employee   Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  history    EmploymentHistory? @relation(fields: [historyId], references: [id], onDelete: SetNull)
 
   @@index([employeeId])
+  @@index([historyId])
   @@map("employee_documents")
 }
 
@@ -331,6 +505,22 @@ enum AttendanceStatus {
   ABSENT
 }
 
+enum AttendanceApprovalStatus {
+  APPROVED
+  PENDING
+  REJECTED
+}
+
+enum AttendanceExceptionType {
+  OUTSIDE_GEOFENCE
+  WRONG_SCHEDULE
+  FACE_UNRECOGNIZED
+  GPS_UNAVAILABLE
+  MISSED_PUNCH
+  LATE_ARRIVAL
+  OTHER
+}
+
 model Attendance {
   id              String           @id @default(cuid())
   employeeId      String
@@ -343,26 +533,456 @@ model Attendance {
   checkOutLng     Float?
   checkInPhotoUrl String?
   checkOutPhotoUrl String?
+  checkInLocationId String?
+  checkOutLocationId String?
+  checkInAccuracyMeters Float?
+  checkOutAccuracyMeters Float?
+  checkInDistanceMeters Float?
+  checkOutDistanceMeters Float?
+  geofenceReason String?
   deviceInfo      Json?
   matchScore      Float?
   livenessPassed  Boolean          @default(false)
+  livenessChallenge String?
+  livenessPolicy  LivenessMode?
+  approvalStatus AttendanceApprovalStatus @default(APPROVED)
+  exceptionType AttendanceExceptionType?
+  approvalRequestNote String?
+  approvalUpdate     Json?
+  approvalEvidencePhotoUrls String[] @default([])
+  manualWorkScheduleId String?
+  manualWorkScheduleName String?
+  latePenaltyWaived  Boolean          @default(false)
+  approvalReviewedAt DateTime?
+  approvalReviewedById String?
+  approvalReviewNote String?
   status          AttendanceStatus @default(ABSENT)
   createdAt       DateTime         @default(now())
   employee        Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  sessions        AttendanceSession[]
+  overtimeRequests AttendanceOvertimeRequest[]
+  checkInLocation BranchLocation? @relation("CheckInLocation", fields: [checkInLocationId], references: [id], onDelete: SetNull)
+  checkOutLocation BranchLocation? @relation("CheckOutLocation", fields: [checkOutLocationId], references: [id], onDelete: SetNull)
 
   @@unique([employeeId, workDate])
   @@index([workDate])
+  @@index([checkInLocationId])
+  @@index([approvalStatus, workDate])
   @@map("attendances")
+}
+
+model AttendanceSession {
+  id                    String   @id @default(cuid())
+  attendanceId          String
+  sequence              Int
+  checkInAt             DateTime
+  checkOutAt            DateTime?
+  checkInLocationId     String?
+  checkOutLocationId    String?
+  checkInPhotoUrl       String?
+  checkOutPhotoUrl      String?
+  checkInLat            Float?
+  checkInLng            Float?
+  checkOutLat           Float?
+  checkOutLng           Float?
+  checkInAccuracyMeters Float?
+  checkOutAccuracyMeters Float?
+  checkInDistanceMeters Float?
+  checkOutDistanceMeters Float?
+  checkOutUpdateCount   Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  attendance Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+
+  @@unique([attendanceId, sequence])
+  @@index([attendanceId, checkInAt])
+  @@map("attendance_sessions")
 }
 
 model WorkSchedule {
   id           String @id @default(cuid())
-  name         String
+  name         String @unique
   startTime    String // "08:00"
   endTime      String // "17:00"
-  graceMinutes Int    @default(15)
+  secondStartTime String? // optional second segment, e.g. "17:00"
+  secondEndTime   String? // optional second segment, e.g. "22:00"
+  displayOrder Int    @default(0)
 
+  assignments EmployeeWorkScheduleAssignment[]
+  overrides   EmployeeScheduleOverride[]
+  dailySchedules EmployeeDailySchedule[]
+
+  @@index([displayOrder])
   @@map("work_schedules")
+}
+
+enum DailyScheduleSource {
+  GENERATED
+  MANAGER_EDITED
+  SHIFT_CHANGE_APPROVED
+}
+
+model WorkRosterMonth {
+  id            String           @id @default(cuid())
+  monthStart    DateTime         @unique @db.Date
+  generatedAt   DateTime         @default(now())
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  dailySchedules EmployeeDailySchedule[]
+
+  @@map("work_roster_months")
+}
+
+model EmployeeDailySchedule {
+  id             String              @id @default(cuid())
+  rosterMonthId  String
+  employeeId     String
+  workDate       DateTime            @db.Date
+  workScheduleId String
+  scheduleName   String
+  source         DailyScheduleSource @default(GENERATED)
+  note           String?
+  createdById    String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  rosterMonth  WorkRosterMonth @relation(fields: [rosterMonthId], references: [id], onDelete: Cascade)
+  employee     Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  workSchedule WorkSchedule    @relation(fields: [workScheduleId], references: [id], onDelete: Restrict)
+  segments     EmployeeDailyScheduleSegment[]
+
+  @@unique([employeeId, workDate])
+  @@index([rosterMonthId, workDate])
+  @@map("employee_daily_schedules")
+}
+
+model EmployeeDailyScheduleSegment {
+  id              String   @id @default(cuid())
+  dailyScheduleId String
+  branchId        String
+  sequence        Int
+  startTime       String
+  endTime         String
+
+  dailySchedule EmployeeDailySchedule @relation(fields: [dailyScheduleId], references: [id], onDelete: Cascade)
+  branch        Branch                @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@unique([dailyScheduleId, sequence])
+  @@index([branchId])
+  @@map("employee_daily_schedule_segments")
+}
+
+enum ScheduleOverrideSource {
+  MANAGER_OVERRIDE
+  SHIFT_CHANGE_APPROVED
+}
+
+/// A one-day schedule takes precedence over a recurring assignment without
+/// rewriting that employee's normal weekly schedule.
+model EmployeeScheduleOverride {
+  id             String                 @id @default(cuid())
+  employeeId     String
+  workDate       DateTime               @db.Date
+  workScheduleId String
+  source         ScheduleOverrideSource @default(MANAGER_OVERRIDE)
+  requestId      String?
+  note           String?
+  createdById    String?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  workSchedule WorkSchedule @relation(fields: [workScheduleId], references: [id], onDelete: Restrict)
+
+  @@unique([employeeId, workDate])
+  @@index([workDate])
+  @@index([workScheduleId])
+  @@map("employee_schedule_overrides")
+}
+
+/// An effective-dated schedule assignment. An empty `weekdays` value means
+/// every day; otherwise values follow JavaScript's convention (0 = Sunday).
+model EmployeeWorkScheduleAssignment {
+  id             String   @id @default(cuid())
+  employeeId     String
+  workScheduleId String
+  effectiveFrom  DateTime @db.Date
+  effectiveTo    DateTime? @db.Date
+  weekdays       Int[]    @default([])
+  priority       Int      @default(0)
+  note           String?
+  createdAt      DateTime @default(now())
+
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  workSchedule WorkSchedule @relation(fields: [workScheduleId], references: [id], onDelete: Restrict)
+
+  @@unique([employeeId, workScheduleId, effectiveFrom])
+  @@index([employeeId, effectiveFrom, effectiveTo])
+  @@index([workScheduleId])
+  @@map("employee_work_schedule_assignments")
+}
+
+enum AttendanceCorrectionStatus {
+  PENDING
+  NEEDS_MORE_INFO
+  APPROVED
+  REJECTED
+}
+
+enum AttendanceCorrectionAction {
+  CREATED
+  UPDATED
+  REQUESTED_MORE_INFO
+  APPROVED
+  REJECTED
+}
+
+/// Immutable request for a missing or incorrect punch; the original
+/// attendance record is preserved and the approved change is auditable.
+model AttendanceCorrectionRequest {
+  id              String   @id @default(cuid())
+  employeeId      String
+  attendanceId    String?
+  workDate        DateTime @db.Date
+  proposedCheckIn DateTime?
+  proposedCheckOut DateTime?
+  reason          String
+  evidencePhotoUrl String?
+  evidencePhotoUrls String[] @default([])
+  status          AttendanceCorrectionStatus @default(PENDING)
+  reviewedById    String?
+  reviewedAt      DateTime?
+  reviewNote      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  history  AttendanceCorrectionHistory[]
+
+  @@index([employeeId, workDate, status])
+  @@map("attendance_correction_requests")
+}
+
+/// Append-only record of each employee amendment and each manager decision.
+model AttendanceCorrectionHistory {
+  id          String                     @id @default(cuid())
+  requestId   String
+  action      AttendanceCorrectionAction
+  actorId     String?
+  note        String?
+  snapshot    Json?
+  createdAt   DateTime                   @default(now())
+
+  request AttendanceCorrectionRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId, createdAt])
+  @@map("attendance_correction_history")
+}
+
+enum AttendanceOvertimeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model AttendanceOvertimeRequest {
+  id           String   @id @default(cuid())
+  attendanceId String
+  employeeId   String
+  requestedMinutes Int
+  reason       String
+  status       AttendanceOvertimeStatus @default(PENDING)
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+  createdAt    DateTime @default(now())
+
+  attendance Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  employee   Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([attendanceId])
+  @@index([employeeId, status])
+  @@map("attendance_overtime_requests")
+}
+
+enum TimesheetPeriodStatus {
+  DRAFT
+  REVIEW
+  LOCKED
+}
+
+model TimesheetPeriod {
+  id          String   @id @default(cuid())
+  startDate   DateTime @db.Date
+  endDate     DateTime @db.Date
+  status      TimesheetPeriodStatus @default(DRAFT)
+  lockedAt    DateTime?
+  lockedById  String?
+  reopenedAt  DateTime?
+  reopenedById String?
+  reopenReason String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  entries TimesheetEntry[]
+
+  @@unique([startDate, endDate])
+  @@index([status, startDate])
+  @@map("timesheet_periods")
+}
+
+model TimesheetEntry {
+  id                String   @id @default(cuid())
+  periodId          String
+  employeeId        String
+  workDate          DateTime @db.Date
+  attendanceId      String?
+  scheduledMinutes  Int      @default(0)
+  workedMinutes     Int      @default(0)
+  roundedWorkMinutes Int     @default(0)
+  workUnits         Decimal  @default(0) @db.Decimal(10, 4)
+  lateMinutes       Int      @default(0)
+  earlyLeaveMinutes Int      @default(0)
+  latePenalty       Decimal  @default(0) @db.Decimal(18, 2)
+  missingPunch      Boolean  @default(false)
+  missingPunchPenalty Decimal @default(0) @db.Decimal(18, 2)
+  overtimeMinutes   Int      @default(0)
+  overtimeApprovedMinutes Int @default(0)
+  sourceSnapshot    Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  period    TimesheetPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  employee  Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([periodId, employeeId, workDate])
+  @@index([employeeId, workDate])
+  @@map("timesheet_entries")
+}
+
+/// A scoped credential for a system-to-system integration. The plaintext key
+/// is returned exactly once at creation; only its SHA-256 digest is persisted.
+model IntegrationApiKey {
+  id         String    @id @default(cuid())
+  name       String
+  keyPrefix  String    @unique
+  secretHash String    @unique
+  scopes     String[]
+  branchIds  String[]  @default([])
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdById String?
+  createdAt  DateTime  @default(now())
+
+  kpiEvents          IntegrationKpiEvent[]
+  idempotencyRecords IntegrationIdempotencyRecord[]
+
+  @@index([revokedAt, expiresAt])
+  @@map("integration_api_keys")
+}
+
+/// An immutable KPI/point-of-sale input accepted from a scoped integration.
+/// `externalId` makes upstream retries safe independently of HTTP transport.
+model IntegrationKpiEvent {
+  id           String   @id @default(cuid())
+  apiKeyId     String
+  externalId   String
+  employeeId   String
+  branchId     String
+  occurredAt   DateTime
+  salesAmount  Decimal  @default(0) @db.Decimal(18, 2)
+  orderCount   Int      @default(0)
+  currency     String   @default("VND")
+  payload      Json?
+  createdAt    DateTime @default(now())
+
+  apiKey IntegrationApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Restrict)
+
+  @@unique([apiKeyId, externalId])
+  @@index([employeeId, occurredAt])
+  @@index([branchId, occurredAt])
+  @@map("integration_kpi_events")
+}
+
+/// Retains a successful POST response for replay of the same Idempotency-Key.
+model IntegrationIdempotencyRecord {
+  id             String   @id @default(cuid())
+  apiKeyId       String
+  endpoint       String
+  idempotencyKey String
+  requestHash    String
+  response       Json
+  createdAt      DateTime @default(now())
+
+  apiKey IntegrationApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@unique([apiKeyId, endpoint, idempotencyKey])
+  @@index([createdAt])
+  @@map("integration_idempotency_records")
+}
+
+/// Configurable POS/KPI fields applied to the `payload` of KPI events.
+model IntegrationKpiField {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  label       String
+  fieldType   String   @default("NUMBER") // NUMBER | TEXT | BOOLEAN
+  required    Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+  @@map("integration_kpi_fields")
+}
+
+enum IntegrationWebhookDeliveryStatus {
+  PENDING
+  DELIVERED
+  DEAD_LETTER
+}
+
+/// A server-to-server webhook target. Its signing secret is encrypted at rest
+/// and returned only at creation time.
+model IntegrationWebhookSubscription {
+  id               String   @id @default(cuid())
+  url              String
+  eventTypes       String[] @default([])
+  secretCiphertext Bytes
+  isActive         Boolean  @default(true)
+  createdById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  deliveries IntegrationWebhookDelivery[]
+
+  @@index([isActive])
+  @@map("integration_webhook_subscriptions")
+}
+
+/// Durable retry/dead-letter log for outbound integration events.
+model IntegrationWebhookDelivery {
+  id             String                           @id @default(cuid())
+  subscriptionId String
+  eventType      String
+  payload        Json
+  status         IntegrationWebhookDeliveryStatus @default(PENDING)
+  attempts       Int                              @default(0)
+  nextAttemptAt  DateTime                         @default(now())
+  lastStatusCode Int?
+  lastError      String?
+  deliveredAt    DateTime?
+  createdAt      DateTime                         @default(now())
+  updatedAt      DateTime                         @updatedAt
+
+  subscription IntegrationWebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@map("integration_webhook_deliveries")
 }
 
 // =============================================================================
@@ -587,294 +1207,6 @@ model TaskAttachment {
 
   @@index([taskId])
   @@map("task_attachments")
-}
-
-// =============================================================================
-// 6. FINANCE
-// =============================================================================
-
-enum InvoiceStatus {
-  DRAFT
-  SENT
-  PARTIAL
-  PAID
-  OVERDUE
-  VOID
-}
-
-enum ExpenseStatus {
-  DRAFT
-  APPROVED
-  PAID
-}
-
-enum ReimbursementStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  PAID
-}
-
-model Invoice {
-  id         String        @id @default(cuid())
-  number     String        @unique
-  customerId String
-  issueDate  DateTime      @db.Date
-  dueDate    DateTime      @db.Date
-  subtotal   Decimal       @default(0) @db.Decimal(18, 2)
-  tax        Decimal       @default(0) @db.Decimal(18, 2)
-  total      Decimal       @default(0) @db.Decimal(18, 2)
-  status     InvoiceStatus @default(DRAFT)
-  createdAt  DateTime      @default(now())
-
-  customer Customer      @relation(fields: [customerId], references: [id])
-  items    InvoiceItem[]
-  payments Payment[]
-
-  @@index([status])
-  @@map("invoices")
-}
-
-model InvoiceItem {
-  id          String  @id @default(cuid())
-  invoiceId   String
-  description String
-  quantity    Decimal @default(1) @db.Decimal(18, 2)
-  unitPrice   Decimal @default(0) @db.Decimal(18, 2)
-  lineTotal   Decimal @default(0) @db.Decimal(18, 2)
-  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-
-  @@index([invoiceId])
-  @@map("invoice_items")
-}
-
-model Payment {
-  id        String   @id @default(cuid())
-  invoiceId String
-  amount    Decimal  @db.Decimal(18, 2)
-  method    String?
-  paidAt    DateTime @db.Date
-  reference String?
-  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-
-  @@index([invoiceId])
-  @@map("payments")
-}
-
-model ExpenseCategory {
-  id   String @id @default(cuid())
-  name String @unique // OPERATIONAL, PURCHASE, SALARY, REIMBURSEMENT
-
-  expenses Expense[]
-
-  @@map("expense_categories")
-}
-
-model Expense {
-  id           String          @id @default(cuid())
-  categoryId   String
-  title        String
-  amount       Decimal         @db.Decimal(18, 2)
-  spentAt      DateTime        @db.Date
-  recordedById String?
-  receiptUrl   String?
-  status       ExpenseStatus   @default(DRAFT)
-  createdAt    DateTime        @default(now())
-  category     ExpenseCategory @relation(fields: [categoryId], references: [id])
-  recordedBy   Employee?       @relation(fields: [recordedById], references: [id])
-
-  @@index([spentAt])
-  @@index([categoryId])
-  @@map("expenses")
-}
-
-model Reimbursement {
-  id         String              @id @default(cuid())
-  employeeId String
-  title      String
-  amount     Decimal             @db.Decimal(18, 2)
-  receiptUrl String?
-  status     ReimbursementStatus @default(PENDING)
-  approverId String?
-  createdAt  DateTime            @default(now())
-  employee   Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-
-  @@index([employeeId])
-  @@map("reimbursements")
-}
-
-// =============================================================================
-// 7. INVENTORY
-// =============================================================================
-
-enum StockMovementType {
-  IN
-  OUT
-  ADJUST
-}
-
-model Category {
-  id       String     @id @default(cuid())
-  name     String
-  parentId String?
-  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
-  children Category[] @relation("CategoryTree")
-  items    Item[]
-
-  @@map("categories")
-}
-
-model Supplier {
-  id          String  @id @default(cuid())
-  name        String
-  contactName String?
-  phone       String?
-  email       String?
-  address     String?
-  items       Item[]
-
-  @@map("suppliers")
-}
-
-model Warehouse {
-  id        String          @id @default(cuid())
-  name      String
-  location  String?
-  movements StockMovement[]
-
-  @@map("warehouses")
-}
-
-model Item {
-  id           String   @id @default(cuid())
-  sku          String   @unique
-  name         String
-  categoryId   String?
-  supplierId   String?
-  unit         String   @default("pcs")
-  reorderLevel Int      @default(0)
-  unitCost     Decimal  @default(0) @db.Decimal(18, 2)
-  barcode      String?
-  qrCodeUrl    String?
-  createdAt    DateTime @default(now())
-
-  category  Category?       @relation(fields: [categoryId], references: [id])
-  supplier  Supplier?       @relation(fields: [supplierId], references: [id])
-  movements StockMovement[]
-
-  @@index([name])
-  @@map("items")
-}
-
-model StockMovement {
-  id          String            @id @default(cuid())
-  itemId      String
-  warehouseId String
-  type        StockMovementType
-  quantity    Int
-  reference   String?
-  note        String?
-  createdAt   DateTime          @default(now())
-  item        Item              @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  warehouse   Warehouse         @relation(fields: [warehouseId], references: [id])
-
-  @@index([itemId])
-  @@index([warehouseId])
-  @@map("stock_movements")
-}
-
-// =============================================================================
-// 8. CRM
-// =============================================================================
-
-enum CustomerType {
-  PROSPECT
-  ACTIVE
-  CHURNED
-}
-
-enum LeadStatus {
-  NEW
-  CONTACTED
-  QUALIFIED
-  LOST
-}
-
-model Customer {
-  id      String       @id @default(cuid())
-  name    String
-  company String?
-  email   String?
-  phone   String?
-  address String?
-  type    CustomerType @default(PROSPECT)
-  createdAt DateTime   @default(now())
-
-  interactions  Interaction[]
-  opportunities Opportunity[]
-  invoices      Invoice[]
-
-  @@index([name])
-  @@map("customers")
-}
-
-model Lead {
-  id      String     @id @default(cuid())
-  name    String
-  source  String?
-  email   String?
-  phone   String?
-  status  LeadStatus @default(NEW)
-  ownerId String?
-  createdAt DateTime @default(now())
-  owner   Employee?  @relation(fields: [ownerId], references: [id])
-
-  opportunities Opportunity[]
-
-  @@map("leads")
-}
-
-model PipelineStage {
-  id          String        @id @default(cuid())
-  name        String
-  orderIndex  Int           @default(0)
-  probability Int           @default(0)
-  opportunities Opportunity[]
-
-  @@map("pipeline_stages")
-}
-
-model Opportunity {
-  id            String         @id @default(cuid())
-  customerId    String?
-  leadId        String?
-  stageId       String
-  title         String
-  value         Decimal        @default(0) @db.Decimal(18, 2)
-  expectedClose DateTime?      @db.Date
-  ownerId       String?
-  createdAt     DateTime       @default(now())
-  customer      Customer?      @relation(fields: [customerId], references: [id])
-  lead          Lead?          @relation(fields: [leadId], references: [id])
-  stage         PipelineStage  @relation(fields: [stageId], references: [id])
-  owner         Employee?      @relation(fields: [ownerId], references: [id])
-
-  @@index([stageId])
-  @@map("opportunities")
-}
-
-model Interaction {
-  id         String   @id @default(cuid())
-  customerId String
-  type       String // CALL | EMAIL | MEETING | NOTE
-  summary    String
-  ownerId    String?
-  occurredAt DateTime @default(now())
-  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  owner      Employee? @relation(fields: [ownerId], references: [id])
-
-  @@index([customerId])
-  @@map("interactions")
 }
 
 // =============================================================================

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../core/prisma/prisma.service';
 
 export interface SearchHit {
-  type: 'employee' | 'project' | 'task' | 'document' | 'customer';
+  type: 'employee' | 'project' | 'task' | 'document';
   id: string;
   title: string;
   subtitle?: string;
@@ -19,7 +19,7 @@ export class SearchService {
     const term = q.trim();
     const contains = { contains: term, mode: 'insensitive' as const };
 
-    const [employees, projects, tasks, documents, customers] = await Promise.all([
+    const [employees, projects, tasks, documents] = await Promise.all([
       this.prisma.employee.findMany({
         where: { deletedAt: null, OR: [{ fullName: contains }, { employeeNo: contains }] },
         take: 5,
@@ -28,7 +28,6 @@ export class SearchService {
       this.prisma.project.findMany({ where: { OR: [{ name: contains }, { code: contains }] }, take: 5, select: { id: true, name: true, code: true } }),
       this.prisma.task.findMany({ where: { title: contains }, take: 5, select: { id: true, title: true } }),
       this.prisma.document.findMany({ where: { title: contains }, take: 5, select: { id: true, title: true } }),
-      this.prisma.customer.findMany({ where: { OR: [{ name: contains }, { company: contains }] }, take: 5, select: { id: true, name: true, company: true } }),
     ]);
 
     return [
@@ -36,7 +35,6 @@ export class SearchService {
       ...projects.map((p): SearchHit => ({ type: 'project', id: p.id, title: p.name, subtitle: p.code, href: `/dashboard/proyek/${p.id}` })),
       ...tasks.map((t): SearchHit => ({ type: 'task', id: t.id, title: t.title, href: `/dashboard/tugas/${t.id}` })),
       ...documents.map((d): SearchHit => ({ type: 'document', id: d.id, title: d.title, href: `/dashboard/dokumen` })),
-      ...customers.map((c): SearchHit => ({ type: 'customer', id: c.id, title: c.name, subtitle: c.company ?? undefined, href: `/dashboard/crm` })),
     ];
   }
 }

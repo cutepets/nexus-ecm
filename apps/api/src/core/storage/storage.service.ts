@@ -28,15 +28,26 @@ export class StorageService implements OnModuleInit {
   }
 
   async onModuleInit() {
+    let timeout: NodeJS.Timeout | undefined;
     try {
-      const exists = await this.client.bucketExists(this.bucket);
-      if (!exists) {
-        await this.client.makeBucket(this.bucket);
-        this.logger.log(`Created bucket "${this.bucket}"`);
-      }
+      await Promise.race([
+        (async () => {
+          const bucketExists = await this.client.bucketExists(this.bucket);
+          if (!bucketExists) {
+            await this.client.makeBucket(this.bucket);
+            this.logger.log(`Created bucket "${this.bucket}"`);
+          }
+        })(),
+        new Promise<void>((_, reject) => {
+          timeout = setTimeout(() => reject(new Error('MinIO bucket check timed out')), 3000);
+          timeout.unref();
+        }),
+      ]);
     } catch (err) {
       // Don't crash boot if MinIO is briefly unavailable; log and continue.
       this.logger.warn(`Could not verify bucket "${this.bucket}": ${(err as Error).message}`);
+    } finally {
+      if (timeout) clearTimeout(timeout);
     }
   }
 

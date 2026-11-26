@@ -32,21 +32,21 @@ export default function ProjectDetailPage() {
     <div className="space-y-6">
       <PageHeader
         title={project.name}
-        description={`${project.code} · ${project.description ?? 'Tanpa deskripsi'}`}
+        description={`${project.code} · ${project.description ?? 'Chưa có mô tả'}`}
         action={<StatusBadge status={project.status} />}
       />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KpiCard label="Progres" value={`${project.progress}%`} icon={TrendingUp} accent="purple" />
-        <KpiCard label="Tugas" value={project._count.tasks} icon={ListTodo} accent="cyan" />
-        <KpiCard label="Anggota" value={project.members.length} icon={Users} accent="mint" />
-        <KpiCard label="Anggaran" value={formatCurrency(Number(project.budgetPlanned))} icon={Wallet} accent="pink" />
+        <KpiCard label="Tiến độ" value={`${project.progress}%`} icon={TrendingUp} accent="purple" />
+        <KpiCard label="Công việc" value={project._count.tasks} icon={ListTodo} accent="cyan" />
+        <KpiCard label="Thành viên" value={project.members.length} icon={Users} accent="mint" />
+        <KpiCard label="Ngân sách" value={formatCurrency(Number(project.budgetPlanned))} icon={Wallet} accent="pink" />
       </div>
 
       <Tabs defaultValue="board">
         <div className="flex items-center justify-between">
           <TabsList>
-            <TabsTrigger value="board">Papan</TabsTrigger>
+            <TabsTrigger value="board">Bảng công việc</TabsTrigger>
             <TabsTrigger value="overview">Ringkasan</TabsTrigger>
           </TabsList>
           <TaskCreateDialog projectId={id} />
@@ -56,14 +56,14 @@ export default function ProjectDetailPage() {
           {tasks?.length ? (
             <TaskBoard tasks={tasks} />
           ) : (
-            <EmptyState title="Belum ada tugas" description="Tambahkan tugas untuk proyek ini." />
+            <EmptyState title="Chưa có công việc" description="Thêm công việc cho dự án này." />
           )}
         </TabsContent>
 
         <TabsContent value="overview">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="rounded-card border border-border bg-card p-6 shadow-card">
-              <h3 className="mb-4 text-base font-medium">Anggota</h3>
+              <h3 className="mb-4 text-base font-medium">Thành viên</h3>
               {project.members.length ? (
                 <ul className="space-y-3">
                   {project.members.map((m) => (
@@ -73,18 +73,18 @@ export default function ProjectDetailPage() {
                       </Avatar>
                       <div>
                         <div className="text-sm font-medium">{m.employee.fullName}</div>
-                        <div className="text-xs text-ink-subtle">{m.role ?? 'Anggota'}</div>
+                        <div className="text-xs text-ink-subtle">{m.role ?? 'Thành viên'}</div>
                       </div>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-ink-subtle">Belum ada anggota.</p>
+                <p className="text-sm text-ink-subtle">Chưa có thành viên.</p>
               )}
             </div>
 
             <div className="rounded-card border border-border bg-card p-6 shadow-card">
-              <h3 className="mb-4 text-base font-medium">Milestone</h3>
+              <h3 className="mb-4 text-base font-medium">Mốc công việc</h3>
               {project.milestones.length ? (
                 <ul className="space-y-2">
                   {project.milestones.map((ms) => (
@@ -109,7 +109,7 @@ export default function ProjectDetailPage() {
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-ink-subtle">Belum ada milestone.</p>
+                <p className="text-sm text-ink-subtle">Chưa có mốc công việc.</p>
               )}
             </div>
           </div>

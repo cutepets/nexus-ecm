@@ -18,6 +18,17 @@ export class PresignUploadDto {
   kind!: 'photo' | 'document';
 }
 
+/** Upload a profile/identity image before the employee record exists. */
+export class PresignCreateEmployeeUploadDto {
+  @ApiProperty({ example: 'cccd-front.jpg' })
+  @IsString()
+  fileName!: string;
+
+  @ApiProperty({ enum: ['identity-front', 'identity-back'] })
+  @IsEnum(['identity-front', 'identity-back'])
+  kind!: 'identity-front' | 'identity-back';
+}
+
 /** Step 2: confirm an uploaded document so a DB record is created. */
 export class CreateDocumentDto {
   @ApiProperty({ enum: DOC_TYPES })

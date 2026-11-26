@@ -17,8 +17,8 @@ export class PermissionsGuard implements CanActivate {
     const user = context.switchToHttp().getRequest().user as RequestUser | undefined;
     if (!user) throw new ForbiddenException('Not authenticated');
 
-    // SUPER_ADMIN bypasses granular checks.
-    if (user.roles.includes('SUPER_ADMIN')) return true;
+    // ADMIN owns the store and bypasses granular checks.
+    if (user.roles.includes('ADMIN')) return true;
 
     const has = required.every((p) => user.permissions.includes(p));
     if (!has) {

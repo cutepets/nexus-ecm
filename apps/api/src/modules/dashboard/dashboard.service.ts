@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@nexus/database';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { workDateInTimeZone } from '../../common/utils/company-time';
 
 @Injectable()
 export class DashboardService {
@@ -9,9 +10,8 @@ export class DashboardService {
   /** Executive KPI summary aggregated across modules. */
   async summary() {
     const today = new Date();
-    const workDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-
+    const setting = await this.prisma.companySetting.findUnique({ where: { id: 'default' }, select: { timezone: true } });
+    const workDate = workDateInTimeZone(today, setting?.timezone ?? 'Asia/Ho_Chi_Minh');
     const [
       totalEmployees,
       activeEmployees,
@@ -19,7 +19,6 @@ export class DashboardService {
       activeProjects,
       pendingTasks,
       pendingLeaves,
-      monthIncome,
     ] = await Promise.all([
       this.prisma.employee.count({ where: { deletedAt: null } }),
       this.prisma.employee.count({ where: { deletedAt: null, workStatus: { in: ['PERMANENT', 'CONTRACT', 'PROBATION'] } } }),
@@ -27,7 +26,6 @@ export class DashboardService {
       this.prisma.project.count({ where: { status: 'ACTIVE' } }),
       this.prisma.task.count({ where: { status: { not: 'DONE' } } }),
       this.prisma.leaveRequest.count({ where: { status: 'PENDING' } }),
-      this.prisma.payment.aggregate({ _sum: { amount: true }, where: { paidAt: { gte: monthStart } } }),
     ]);
 
     return {
@@ -37,7 +35,6 @@ export class DashboardService {
       activeProjects,
       pendingTasks,
       pendingLeaves,
-      monthIncome: Number(monthIncome._sum.amount ?? 0),
     };
   }
 

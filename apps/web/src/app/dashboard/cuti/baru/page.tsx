@@ -37,9 +37,9 @@ export default function NewLeavePage() {
     setUploading(true);
     try {
       setDocKey(await uploadLeaveDoc(file));
-      toast.success('Dokumen terunggah');
+      toast.success('Đã tải tài liệu lên');
     } catch {
-      toast.error('Gagal mengunggah dokumen');
+      toast.error('Không thể tải tài liệu lên');
     } finally {
       setUploading(false);
     }
@@ -49,7 +49,7 @@ export default function NewLeavePage() {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     if (!employeeId || !leaveTypeId) {
-      toast.error(canManage ? 'Pilih karyawan dan jenis cuti' : 'Pilih jenis cuti');
+      toast.error(canManage ? 'Vui lòng chọn nhân viên và loại nghỉ phép' : 'Vui lòng chọn loại nghỉ phép');
       return;
     }
     create.mutate(
@@ -67,7 +67,7 @@ export default function NewLeavePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Ajukan Cuti" description="Lengkapi formulir pengajuan cuti/izin" />
+      <PageHeader title="Tạo đơn nghỉ phép" description="Điền thông tin đơn nghỉ phép hoặc nghỉ có lý do" />
       <form onSubmit={onSubmit} className="mx-auto max-w-2xl space-y-6">
         <div className="rounded-card border border-border bg-card p-6 shadow-card">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -77,40 +77,40 @@ export default function NewLeavePage() {
               </div>
             )}
             <div>
-              <Label>Jenis Cuti</Label>
+              <Label>Loại nghỉ phép</Label>
               <Select value={leaveTypeId} onChange={(e) => setLeaveTypeId(e.target.value)}>
-                <option value="">— Pilih —</option>
+                <option value="">— Chọn loại nghỉ —</option>
                 {types?.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
-                    {t.defaultQuota > 0 ? ` (kuota ${t.defaultQuota})` : ''}
+                    {t.defaultQuota > 0 ? ` (còn ${t.defaultQuota} ngày)` : ''}
                   </option>
                 ))}
               </Select>
             </div>
             <div />
             <div>
-              <Label>Tanggal Mulai</Label>
+              <Label>Ngày bắt đầu</Label>
               <Input name="startDate" type="date" required />
             </div>
             <div>
-              <Label>Tanggal Selesai</Label>
+              <Label>Ngày kết thúc</Label>
               <Input name="endDate" type="date" required />
             </div>
             <div className="sm:col-span-2">
-              <Label>Alasan</Label>
-              <Textarea name="reason" required placeholder="Jelaskan alasan pengajuan" />
+              <Label>Lý do</Label>
+              <Textarea name="reason" required placeholder="Nêu lý do nghỉ phép" />
             </div>
             {selectedType?.requiresDoc && (
               <div className="sm:col-span-2">
-                <Label>Dokumen Pendukung (wajib)</Label>
+                <Label>Tài liệu đính kèm (bắt buộc)</Label>
                 <Button asChild variant="secondary" disabled={uploading}>
                   <label className="cursor-pointer">
-                    <Upload /> {uploading ? 'Mengunggah…' : docKey ? 'Ganti file' : 'Unggah file'}
+                    <Upload /> {uploading ? 'Đang tải lên…' : docKey ? 'Đổi tệp' : 'Tải tệp lên'}
                     <input type="file" className="hidden" onChange={onFile} />
                   </label>
                 </Button>
-                {docKey && <span className="ml-3 text-xs text-emerald-600">Terunggah ✓</span>}
+                {docKey && <span className="ml-3 text-xs text-emerald-600">Đã tải lên ✓</span>}
               </div>
             )}
           </div>
@@ -118,10 +118,10 @@ export default function NewLeavePage() {
 
         <div className="flex justify-end gap-3">
           <Button type="button" variant="secondary" onClick={() => router.back()}>
-            Batal
+            Hủy
           </Button>
           <Button type="submit" disabled={create.isPending}>
-            {create.isPending ? 'Mengirim…' : 'Kirim Pengajuan'}
+            {create.isPending ? 'Đang gửi…' : 'Gửi đơn'}
           </Button>
         </div>
       </form>

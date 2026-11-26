@@ -1,39 +1,21 @@
 import {
-  LayoutDashboard,
-  Users,
-  Fingerprint,
-  CalendarOff,
-  CalendarDays,
-  FolderKanban,
-  ListTodo,
-  Wallet,
-  Boxes,
-  Contact,
-  FileText,
-  MessagesSquare,
-  type LucideIcon,
+  LayoutDashboard, Users, Fingerprint, ClipboardCheck, CalendarDays, FolderKanban,
+  ListTodo, FileText, MessagesSquare, History, Bell, type LucideIcon,
 } from 'lucide-react';
 
-export interface NavItem {
-  label: string;
-  href: string;
-  icon: LucideIcon;
-  /** Permission required to see this item; undefined = always visible. */
-  permission?: string;
-}
+export interface NavItem { label: string; href: string; icon: LucideIcon; permission?: string; }
 
-/** Primary sidebar navigation. Order follows the product roadmap (docs/05-ROADMAP.md). */
+/** Điều hướng cho bản Nhân sự và Chấm công. */
 export const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Kalender', href: '/dashboard/kalender', icon: CalendarDays },
-  { label: 'Karyawan', href: '/dashboard/karyawan', icon: Users, permission: 'employee:read' },
-  { label: 'Absensi', href: '/dashboard/absensi', icon: Fingerprint, permission: 'attendance:read' },
-  { label: 'Cuti', href: '/dashboard/cuti', icon: CalendarOff, permission: 'leave:read' },
-  { label: 'Proyek', href: '/dashboard/proyek', icon: FolderKanban, permission: 'project:read' },
-  { label: 'Tugas', href: '/dashboard/tugas', icon: ListTodo, permission: 'task:read' },
-  { label: 'Keuangan', href: '/dashboard/keuangan', icon: Wallet, permission: 'finance:read' },
-  { label: 'Inventory', href: '/dashboard/inventory', icon: Boxes, permission: 'inventory:read' },
-  { label: 'CRM', href: '/dashboard/crm', icon: Contact, permission: 'crm:read' },
-  { label: 'Dokumen', href: '/dashboard/dokumen', icon: FileText, permission: 'document:read' },
-  { label: 'Chat', href: '/dashboard/chat', icon: MessagesSquare },
+  { label: 'Chấm công', href: '/dashboard/absensi', icon: Fingerprint, permission: 'attendance:read' },
+  { label: 'Tổng quan', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Lịch', href: '/dashboard/kalender', icon: CalendarDays },
+  { label: 'Nhân viên', href: '/dashboard/karyawan', icon: Users, permission: 'employee:read' },
+  { label: 'Lịch sử chấm công', href: '/dashboard/absensi/lich-su', icon: History, permission: 'attendance:update' },
+  { label: 'Phê duyệt', href: '/dashboard/phe-duyet', icon: ClipboardCheck, permission: 'leave:approve' },
+  { label: 'Thông báo', href: '/dashboard/thong-bao', icon: Bell },
+  { label: 'Dự án', href: '/dashboard/proyek', icon: FolderKanban, permission: 'project:read' },
+  { label: 'Công việc', href: '/dashboard/tugas', icon: ListTodo, permission: 'task:read' },
+  { label: 'Tài liệu', href: '/dashboard/dokumen', icon: FileText, permission: 'document:read' },
+  { label: 'Trò chuyện', href: '/dashboard/chat', icon: MessagesSquare },
 ];

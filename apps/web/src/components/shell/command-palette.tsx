@@ -10,11 +10,10 @@ import { useAuthStore } from '@/stores/auth-store';
 import { globalSearch, type SearchHit } from '@/features/dashboard/api';
 
 const TYPE_LABEL: Record<string, string> = {
-  employee: 'Karyawan',
-  project: 'Proyek',
-  task: 'Tugas',
-  document: 'Dokumen',
-  customer: 'Pelanggan',
+  employee: 'Nhân viên',
+  project: 'Dự án',
+  task: 'Công việc',
+  document: 'Tài liệu',
 };
 
 /**
@@ -28,7 +27,7 @@ export function CommandPalette() {
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey)) {
+      if (typeof e.key === 'string' && e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setOpen((v) => !v);
       }
@@ -63,25 +62,25 @@ export function CommandPalette() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="overflow-hidden p-0">
-        <DialogTitle className="sr-only">Pencarian global</DialogTitle>
+        <DialogTitle className="sr-only">Tìm kiếm toàn hệ thống</DialogTitle>
         <Command shouldFilter={false} className="[&_[cmdk-input-wrapper]]:border-b [&_[cmdk-input-wrapper]]:border-border">
           <div className="flex items-center gap-2 px-4" cmdk-input-wrapper="">
             <Search className="size-4 text-ink-subtle" />
             <Command.Input
               value={query}
               onValueChange={setQuery}
-              placeholder="Cari modul, karyawan, proyek, tugas…"
+              placeholder="Tìm chức năng, nhân viên, dự án, công việc…"
               className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-ink-subtle"
             />
           </div>
           <Command.List className="max-h-80 overflow-y-auto p-2">
             <Command.Empty className="py-6 text-center text-sm text-ink-subtle">
-              Tidak ada hasil.
+              Không tìm thấy kết quả.
             </Command.Empty>
 
             {hits.length > 0 && (
               <Command.Group
-                heading="Hasil Pencarian"
+                heading="Kết quả tìm kiếm"
                 className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-ink-subtle"
               >
                 {hits.map((hit) => (
@@ -99,7 +98,7 @@ export function CommandPalette() {
             )}
 
             <Command.Group
-              heading="Navigasi"
+              heading="Điều hướng"
               className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-ink-subtle"
             >
               {items.map((item) => (

@@ -4,10 +4,10 @@
 
 ### Enterprise Company Management System
 
-A modern, full-featured, **100% open-source** management platform for medium-to-large companies — HR, attendance, leave, projects, finance, inventory, CRM, documents, and realtime chat in one app.
+A modern, full-featured, **100% open-source** people-operations platform for medium-to-large companies — HR, attendance, leave, projects, documents, and realtime chat in one app.
 
 <p>
-  <img alt="Status" src="https://img.shields.io/badge/status-complete%20(14%2F14%20phases)-brightgreen" />
+  <img alt="Status" src="https://img.shields.io/badge/status-active%20development-blue" />
   <img alt="License" src="https://img.shields.io/badge/license-MIT-blue" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-100%25-3178c6" />
   <img alt="NestJS" src="https://img.shields.io/badge/NestJS-10-e0234e" />
@@ -21,7 +21,7 @@ A modern, full-featured, **100% open-source** management platform for medium-to-
 
 ## ✨ Highlights
 
-- **11 functional modules** + executive dashboard — a complete back-office in a single deployment.
+- **8 functional modules** + executive dashboard — a complete people-operations workspace in a single deployment.
 - **Browser-based AI face recognition** for attendance — no paid cloud vision API, biometrics never leave the device.
 - **Realtime chat** over Socket.IO (presence, typing, read receipts, @mentions, announcements).
 - **Employee self-service** — scoped dashboard, attendance & leave for each employee, plus a shared company calendar.
@@ -42,11 +42,8 @@ A modern, full-featured, **100% open-source** management platform for medium-to-
 | 4 | **Leave** | Balances, requests with supporting docs, multi-step approval (Supervisor → Manager → HR) |
 | 5 | **Projects** | CRUD, members, milestones, auto progress, budget tracking |
 | 6 | **Tasks** | Assignees, priority, checklist, comments, attachments — **Kanban / Table / Calendar** views |
-| 7 | **Finance** | Invoices + line items + payments, expenses, reimbursements, **Excel + PDF reports** |
-| 8 | **Inventory** | Items, categories, suppliers, warehouses, stock ledger (In/Out/Adjust), QR codes, low-stock alerts |
-| 9 | **CRM** | Customers, leads, interactions, opportunities, **pipeline board** + funnel |
-| 10 | **Documents** | Folder tree, version control, internal sharing, type tags (MinIO presigned URLs) |
-| 11 | **Chat** | Realtime direct & group messaging, mentions, read receipts, company announcements |
+| 7 | **Documents** | Folder tree, version control, internal sharing, type tags (MinIO presigned URLs) |
+| 8 | **Chat** | Realtime direct & group messaging, mentions, read receipts, company announcements |
 | ⊹ | **Self-service** | Per-employee dashboard, attendance & leave, shared company calendar |
 | ⊹ | **Cross-cutting** | RBAC, Audit Log viewer, Notification Center, Global Search (⌘K) |
 
@@ -63,7 +60,6 @@ A modern, full-featured, **100% open-source** management platform for medium-to-
 | **Auth** | JWT access (15m) + refresh (7d) with rotation & reuse detection, Argon2id, RBAC |
 | **Face Recognition** | `@vladmandic/face-api` (TensorFlow.js) — in the browser |
 | **Object Storage** | MinIO (S3-compatible) — private bucket + presigned URLs |
-| **Reporting** | exceljs (Excel) · pdfkit (PDF) · qrcode |
 | **Security** | Helmet, CORS lock, rate limiting, AES-256-GCM at rest (biometrics) |
 | **Infra** | pnpm workspaces + Turborepo · Docker + Docker Compose |
 
@@ -85,7 +81,7 @@ nexus-ecm/
 │   ├── shared/       # Shared types, constants, permission keys
 │   └── config/       # Shared presets
 ├── docker/           # Dockerfiles + dev & prod compose
-└── docs/             # SRS, ERD, architecture, roadmap, deployment
+└── docs/             # Current system map and focused operational notes
 ```
 
 ---
@@ -120,20 +116,20 @@ cd apps/web && node scripts/download-face-models.mjs
 
 ### 5. Run the apps
 ```bash
-pnpm dev            # API on :4000, Web on :3000
+pnpm dev            # API on :4100, Web on :3100
 ```
 
 | Service | URL |
 |---|---|
-| **Web app** | http://localhost:3000 |
-| API | http://localhost:4000/api/v1 |
-| Swagger / OpenAPI | http://localhost:4000/api/docs |
+| **Web app** | http://localhost:3100 |
+| API | http://localhost:4100/api/v1 |
+| Swagger / OpenAPI | http://localhost:4100/api/docs |
 | MinIO console | http://localhost:9001 |
 | MailHog inbox | http://localhost:8025 |
 
 ### Default login
 ```
-Email:    admin@nexus.local
+Email:    admin
 Password: Admin123!
 ```
 > ⚠️ Change `SEED_ADMIN_PASSWORD` before seeding in any non-local environment.
@@ -152,10 +148,9 @@ pnpm --filter @nexus/api test     # unit tests (jest)
 
 ## 📦 Deployment
 
-Production images, compose, and a full guide (env/secrets, MinIO buckets, migrations, reverse-proxy/TLS, backups, **security pen-test checklist**) are in:
+Production images and compose configuration are in:
 
 - [`docker/docker-compose.prod.yml`](docker/docker-compose.prod.yml)
-- [`docs/06-DEPLOYMENT.md`](docs/06-DEPLOYMENT.md)
 
 ```bash
 docker compose -f docker/docker-compose.prod.yml --env-file .env up -d --build
@@ -167,12 +162,8 @@ docker compose -f docker/docker-compose.prod.yml --env-file .env up -d --build
 
 | Doc | Description |
 |---|---|
-| [`docs/01-SRS.md`](docs/01-SRS.md) | Software Requirement Specification |
-| [`docs/02-ERD.md`](docs/02-ERD.md) | Entity-Relationship Diagram (Mermaid) |
-| [`docs/03-FOLDER-STRUCTURE.md`](docs/03-FOLDER-STRUCTURE.md) | Folder structure |
-| [`docs/04-FACE-RECOGNITION.md`](docs/04-FACE-RECOGNITION.md) | Face recognition architecture |
-| [`docs/05-ROADMAP.md`](docs/05-ROADMAP.md) | Implementation roadmap (all 14 phases ✅) |
-| [`docs/06-DEPLOYMENT.md`](docs/06-DEPLOYMENT.md) | Deployment & hardening guide |
+| [`docs/system-map.md`](docs/system-map.md) | Current modules, routes, data flows, and local services |
+| [`docs/testing/`](docs/testing/) | Focused acceptance and pilot checklists |
 | [`packages/database/schema.prisma`](packages/database/schema.prisma) | Complete Prisma schema |
 
 ---
@@ -185,7 +176,7 @@ docker compose -f docker/docker-compose.prod.yml --env-file .env up -d --build
 - Face embeddings encrypted at rest (AES-256-GCM); files via private bucket + presigned URLs.
 - Full audit trail (who changed what, before/after) on every mutation.
 
-See the [pen-test checklist](docs/06-DEPLOYMENT.md#7-security-checklist-pen-test).
+Review environment secrets and HTTPS configuration before exposing the deployment publicly.
 
 ---
 

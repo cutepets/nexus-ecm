@@ -22,8 +22,8 @@ export default function TugasPage() {
 
   const columns = useMemo<ColumnDef<TaskListItem>[]>(
     () => [
-      { accessorKey: 'title', header: 'Tugas', cell: ({ row }) => <span className="font-medium">{row.original.title}</span> },
-      { id: 'project', header: 'Proyek', cell: ({ row }) => row.original.project?.code ?? '—' },
+      { accessorKey: 'title', header: 'Công việc', cell: ({ row }) => <span className="font-medium">{row.original.title}</span> },
+      { id: 'project', header: 'Dự án', cell: ({ row }) => row.original.project?.code ?? '—' },
       {
         accessorKey: 'priority',
         header: 'Prioritas',
@@ -37,7 +37,7 @@ export default function TugasPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Tugas" description="Kelola semua tugas lintas proyek" action={<TaskCreateDialog />} />
+      <PageHeader title="Công việc" description="Quản lý công việc trên tất cả dự án" action={<TaskCreateDialog />} />
 
       <Tabs defaultValue="kanban">
         <TabsList>
@@ -55,8 +55,8 @@ export default function TugasPage() {
             columns={columns}
             data={tasks ?? []}
             loading={isLoading}
-            searchPlaceholder="Cari tugas…"
-            emptyTitle="Belum ada tugas"
+            searchPlaceholder="Tìm công việc…"
+            emptyTitle="Chưa có công việc"
             onRowClick={(t) => router.push(`/dashboard/tugas/${t.id}`)}
           />
         </TabsContent>
@@ -96,7 +96,7 @@ function CalendarView({ tasks }: { tasks: TaskListItem[] }) {
 
     return {
       cells,
-      monthLabel: cursor.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }),
+      monthLabel: cursor.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' }),
     };
   }, [cursor, tasks]);
 
@@ -114,7 +114,7 @@ function CalendarView({ tasks }: { tasks: TaskListItem[] }) {
         </div>
       </div>
       <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-ink-subtle">
-        {['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map((d) => (
+        {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((d) => (
           <div key={d} className="py-1">{d}</div>
         ))}
       </div>

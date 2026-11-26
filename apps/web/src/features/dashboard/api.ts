@@ -10,7 +10,6 @@ export interface DashboardSummary {
   activeProjects: number;
   pendingTasks: number;
   pendingLeaves: number;
-  monthIncome: number;
 }
 export interface ActivityItem {
   id: string; action: string; entity: string; createdAt: string;
@@ -57,9 +56,10 @@ export function useMarkAllRead() {
   });
 }
 
-export function useAuditLogs(filters: { entity?: string; action?: string } = {}) {
+export function useAuditLogs(filters: { entity?: string; action?: string } = {}, enabled = true) {
   return useQuery({
     queryKey: ['audit-logs', filters],
     queryFn: async () => (await api.get<AuditLog[]>('/audit-logs', { params: filters })).data,
+    enabled,
   });
 }

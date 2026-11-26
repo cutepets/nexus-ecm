@@ -17,10 +17,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={client}>
       {children}
       <Toaster
-        position="top-right"
+        position="top-center"
+        closeButton
         toastOptions={{
           classNames: {
             toast: 'rounded-xl border border-border bg-card text-ink shadow-card',
+            closeButton: 'border-border bg-card text-ink-muted hover:bg-canvas hover:text-ink',
           },
         }}
       />

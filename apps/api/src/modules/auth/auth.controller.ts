@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Post, Req, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -18,14 +19,16 @@ export class AuthController {
 
   @Public()
   @Post('login')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(200)
-  @ApiOperation({ summary: 'Login with email + password' })
+  @ApiOperation({ summary: 'Login with username, phone, or email + password' })
   login(@Body() dto: LoginDto, @Req() req: Request) {
-    return this.auth.login(dto.email, dto.password, ctxOf(req));
+    return this.auth.login(dto.identifier ?? dto.email ?? '', dto.password, ctxOf(req));
   }
 
   @Public()
   @Post('refresh')
+  @Throttle({ default: { limit: 15, ttl: 60_000 } })
   @HttpCode(200)
   @ApiOperation({ summary: 'Exchange a refresh token for a new token pair (rotating)' })
   refresh(@Body() dto: RefreshDto, @Req() req: Request) {

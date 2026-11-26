@@ -55,9 +55,9 @@ export function useCreateTask() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keys.all });
       qc.invalidateQueries({ queryKey: ['projects'] });
-      toast.success('Tugas dibuat');
+      toast.success('Đã tạo công việc');
     },
-    onError: (e) => toast.error(errMsg(e, 'Gagal membuat tugas')),
+    onError: (e) => toast.error(errMsg(e, 'Không thể tạo công việc')),
   });
 }
 
@@ -70,7 +70,7 @@ export function useMoveTask() {
       qc.invalidateQueries({ queryKey: keys.all });
       qc.invalidateQueries({ queryKey: ['projects'] });
     },
-    onError: (e) => toast.error(errMsg(e, 'Gagal memindah tugas')),
+    onError: (e) => toast.error(errMsg(e, 'Không thể chuyển trạng thái công việc')),
   });
 }
 
@@ -83,9 +83,9 @@ export function useDeleteTask() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keys.all });
       qc.invalidateQueries({ queryKey: ['projects'] });
-      toast.success('Tugas dihapus');
+      toast.success('Đã xóa công việc');
     },
-    onError: (e) => toast.error(errMsg(e, 'Gagal menghapus tugas')),
+    onError: (e) => toast.error(errMsg(e, 'Không thể xóa công việc')),
   });
 }
 
@@ -111,7 +111,7 @@ export function useAddComment(taskId: string) {
     mutationFn: async (payload: { body: string; authorId?: string }) =>
       (await api.post(`/tasks/${taskId}/comments`, payload)).data,
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.detail(taskId) }),
-    onError: (e) => toast.error(errMsg(e, 'Gagal menambah komentar')),
+    onError: (e) => toast.error(errMsg(e, 'Không thể thêm bình luận')),
   });
 }
 

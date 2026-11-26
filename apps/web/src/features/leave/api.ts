@@ -97,9 +97,9 @@ export function useCreateLeave() {
       (await api.post<LeaveRequest>('/leave/requests', payload)).data,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['leave'] });
-      toast.success('Pengajuan cuti terkirim');
+      toast.success('Đã gửi đơn nghỉ phép');
     },
-    onError: (e) => toast.error(errMsg(e, 'Gagal mengajukan cuti')),
+    onError: (e) => toast.error(errMsg(e, 'Không thể gửi đơn nghỉ phép')),
   });
 }
 
@@ -110,9 +110,9 @@ export function useDecideLeave(id: string) {
       (await api.post(`/leave/requests/${id}/decision`, payload)).data,
     onSuccess: (_d, v) => {
       qc.invalidateQueries({ queryKey: ['leave'] });
-      toast.success(v.decision === 'APPROVED' ? 'Pengajuan disetujui' : 'Pengajuan ditolak');
+      toast.success(v.decision === 'APPROVED' ? 'Đã duyệt đơn' : 'Đã từ chối đơn');
     },
-    onError: (e) => toast.error(errMsg(e, 'Gagal memproses keputusan')),
+    onError: (e) => toast.error(errMsg(e, 'Không thể xử lý quyết định')),
   });
 }
 
@@ -126,7 +126,7 @@ export function useWithdrawLeave() {
       qc.invalidateQueries({ queryKey: ['leave'] });
       toast.success('Pengajuan ditarik');
     },
-    onError: (e) => toast.error(errMsg(e, 'Gagal menarik pengajuan')),
+    onError: (e) => toast.error(errMsg(e, 'Không thể rút đơn')),
   });
 }
 

@@ -19,7 +19,7 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": false,
     "sourceMap": true,
-    "incremental": true,
+    "incremental": false,
     "outDir": "./dist",
     "rootDir": "./src",
     "baseUrl": "./src"

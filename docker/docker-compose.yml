@@ -14,11 +14,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexus_password}
       POSTGRES_DB: ${POSTGRES_DB:-nexus_ecm}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5440}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nexus}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nexus} -d ${POSTGRES_DB:-nexus_ecm}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -28,7 +28,7 @@ services:
     container_name: nexus-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6381:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -38,38 +38,17 @@ services:
       retries: 5
 
   minio:
-    image: minio/minio:latest
+    # MinIO's former Docker Hub image is no longer publicly available.
+    # SeaweedFS exposes the same S3-compatible API used by the application.
+    image: chrislusf/seaweedfs:latest
     container_name: nexus-minio
     restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    command: server -s3 -s3.port=9000 -dir=/data
     ports:
       - "9000:9000"   # S3 API
-      - "9001:9001"   # Web console
+      - "9333:9333"   # Admin UI
     volumes:
       - minio_data:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-
-  # Creates the default bucket on startup
-  minio-init:
-    image: minio/mc:latest
-    container_name: nexus-minio-init
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
-      mc mb --ignore-existing local/${MINIO_BUCKET:-nexus-files};
-      mc anonymous set none local/${MINIO_BUCKET:-nexus-files};
-      echo 'MinIO bucket ready';
-      "
 
   mailhog:
     image: mailhog/mailhog:latest

@@ -29,8 +29,8 @@ export default function DokumenPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Dokumen"
-        description="Folder, dokumen, dan kontrol versi"
+        title="Tài liệu"
+        description="Thư mục, tài liệu và quản lý phiên bản"
         action={<div className="flex gap-2"><FolderDialog /><DocDialog folderId={folderId} /></div>}
       />
 
@@ -40,7 +40,7 @@ export default function DokumenPage() {
             onClick={() => setFolderId(undefined)}
             className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm ${!folderId ? 'bg-canvas font-medium' : 'text-ink-muted hover:bg-canvas'}`}
           >
-            <FolderIcon className="size-4" /> Semua
+            <FolderIcon className="size-4" /> Tất cả
           </button>
           {folders?.map((f) => (
             <button
@@ -67,7 +67,7 @@ export default function DokumenPage() {
                     <FileText className="size-4 text-ink-subtle" />
                     <span>
                       <span className="block text-sm font-medium">{d.title}</span>
-                      <span className="block text-xs text-ink-subtle">{d._count.versions} versi · {d._count.shares} dibagikan</span>
+                      <span className="block text-xs text-ink-subtle">{d._count.versions} phiên bản · đã chia sẻ {d._count.shares} lần</span>
                     </span>
                   </span>
                   <StatusBadge status={d.docType} />
@@ -75,7 +75,7 @@ export default function DokumenPage() {
               ))}
             </div>
           ) : (
-            <EmptyState title="Belum ada dokumen" description="Buat dokumen lalu unggah versinya." />
+            <EmptyState title="Chưa có tài liệu" description="Tạo tài liệu rồi tải lên phiên bản đầu tiên." />
           )}
         </div>
       </div>
@@ -94,12 +94,12 @@ function DocDetailView({ id }: { id: string }) {
   return (
     <div>
       <DialogTitle className="text-lg font-medium">{data.title}</DialogTitle>
-      <div className="mt-1 text-sm text-ink-subtle">{data.docType}</div>
+      <div className="mt-1 text-sm text-ink-subtle"><StatusBadge status={data.docType} /></div>
       <div className="mt-4 flex items-center justify-between">
-        <h4 className="flex items-center gap-2 text-sm font-medium"><History className="size-4" /> Versi</h4>
+        <h4 className="flex items-center gap-2 text-sm font-medium"><History className="size-4" /> Phiên bản</h4>
         <Button asChild variant="secondary" size="sm" disabled={upload.isPending}>
           <label className="cursor-pointer">
-            <Upload /> {upload.isPending ? 'Mengunggah…' : 'Unggah Versi'}
+            <Upload /> {upload.isPending ? 'Đang tải lên…' : 'Tải lên phiên bản'}
             <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && upload.mutate(e.target.files[0])} />
           </label>
         </Button>
@@ -109,11 +109,11 @@ function DocDetailView({ id }: { id: string }) {
           <li key={v.id} className="flex items-center justify-between py-2 text-sm">
             <span>v{v.version} · {v.fileName}</span>
             <a href={v.downloadUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-purple-700 hover:underline">
-              <ExternalLink className="size-3.5" /> Unduh
+              <ExternalLink className="size-3.5" /> Tải xuống
             </a>
           </li>
         ))}
-        {!data.versions.length && <li className="py-2 text-sm text-ink-subtle">Belum ada versi.</li>}
+        {!data.versions.length && <li className="py-2 text-sm text-ink-subtle">Chưa có phiên bản.</li>}
       </ul>
     </div>
   );
@@ -124,15 +124,15 @@ function FolderDialog() {
   const create = useCreateFolder();
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button variant="secondary"><Plus /> Folder</Button></DialogTrigger>
+      <DialogTrigger asChild><Button variant="secondary"><Plus /> Thư mục</Button></DialogTrigger>
       <DialogContent className="p-6">
-        <DialogTitle className="text-lg font-medium">Folder Baru</DialogTitle>
+        <DialogTitle className="text-lg font-medium">Tạo thư mục</DialogTitle>
         <form
           onSubmit={(e) => { e.preventDefault(); const fd = new FormData(e.currentTarget); create.mutate({ name: String(fd.get('name')) }, { onSuccess: () => setOpen(false) }); }}
           className="mt-4 space-y-4"
         >
-          <div><Label>Nama</Label><Input name="name" required /></div>
-          <div className="flex justify-end gap-3"><Button type="button" variant="secondary" onClick={() => setOpen(false)}>Batal</Button><Button type="submit">Simpan</Button></div>
+          <div><Label>Tên thư mục</Label><Input name="name" required /></div>
+          <div className="flex justify-end gap-3"><Button type="button" variant="secondary" onClick={() => setOpen(false)}>Hủy</Button><Button type="submit">Lưu</Button></div>
         </form>
       </DialogContent>
     </Dialog>
@@ -144,20 +144,23 @@ function DocDialog({ folderId }: { folderId?: string }) {
   const create = useCreateDocument();
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button><Plus /> Dokumen</Button></DialogTrigger>
+      <DialogTrigger asChild><Button><Plus /> Tài liệu</Button></DialogTrigger>
       <DialogContent className="p-6">
-        <DialogTitle className="text-lg font-medium">Dokumen Baru</DialogTitle>
+        <DialogTitle className="text-lg font-medium">Tạo tài liệu</DialogTitle>
         <form
           onSubmit={(e) => { e.preventDefault(); const fd = new FormData(e.currentTarget); create.mutate({ title: String(fd.get('title')), docType: String(fd.get('docType')), folderId }, { onSuccess: () => setOpen(false) }); }}
           className="mt-4 space-y-4"
         >
-          <div><Label>Judul</Label><Input name="title" required /></div>
-          <div><Label>Tipe</Label>
+          <div><Label>Tiêu đề</Label><Input name="title" required /></div>
+          <div><Label>Loại tài liệu</Label>
             <Select name="docType" defaultValue="OTHER">
-              {['SOP', 'CONTRACT', 'INVOICE', 'LETTER', 'OTHER'].map((t) => <option key={t} value={t}>{t}</option>)}
+              <option value="SOP">Quy trình (SOP)</option>
+              <option value="CONTRACT">Hợp đồng</option>
+              <option value="LETTER">Văn bản</option>
+              <option value="OTHER">Khác</option>
             </Select>
           </div>
-          <div className="flex justify-end gap-3"><Button type="button" variant="secondary" onClick={() => setOpen(false)}>Batal</Button><Button type="submit" disabled={create.isPending}>Simpan</Button></div>
+          <div className="flex justify-end gap-3"><Button type="button" variant="secondary" onClick={() => setOpen(false)}>Hủy</Button><Button type="submit" disabled={create.isPending}>Lưu</Button></div>
         </form>
       </DialogContent>
     </Dialog>

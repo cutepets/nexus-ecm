@@ -6,15 +6,15 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-const currency = new Intl.NumberFormat('id-ID', {
+const currency = new Intl.NumberFormat('vi-VN', {
   style: 'currency',
-  currency: 'IDR',
+  currency: 'VND',
   maximumFractionDigits: 0,
 });
 
 export const formatCurrency = (value: number) => currency.format(value);
 
-export const formatNumber = (value: number) => new Intl.NumberFormat('id-ID').format(value);
+export const formatNumber = (value: number) => new Intl.NumberFormat('vi-VN').format(value);
 
 export const formatDate = (value: string | Date) =>
-  new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium' }).format(new Date(value));
+  new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium' }).format(new Date(value));

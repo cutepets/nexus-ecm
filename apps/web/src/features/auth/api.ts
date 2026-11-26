@@ -11,14 +11,20 @@ interface LoginResponse {
   user: AuthUser;
 }
 
+interface LoginCredentials {
+  identifier: string;
+  password: string;
+  rememberMe: boolean;
+}
+
 export function useLogin() {
   const setAuth = useAuthStore((s) => s.setAuth);
   return useMutation({
-    mutationFn: async (creds: { email: string; password: string }) => {
+    mutationFn: async ({ rememberMe, ...creds }: LoginCredentials) => {
       const { data } = await api.post<LoginResponse>('/auth/login', creds);
-      return data;
+      return { ...data, rememberMe };
     },
-    onSuccess: (data) => setAuth(data),
+    onSuccess: ({ rememberMe, ...data }) => setAuth(data, rememberMe),
   });
 }
 

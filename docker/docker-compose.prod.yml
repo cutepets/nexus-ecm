@@ -69,6 +69,7 @@ services:
     env_file: ../.env
     environment:
       NODE_ENV: production
+      API_PORT: 4000
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
       REDIS_URL: redis://redis:6379
       MINIO_ENDPOINT: minio
@@ -78,7 +79,7 @@ services:
       minio:
         condition: service_healthy
     ports:
-      - "4000:4000"
+      - "${API_PORT:-4100}:4000"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4000/api/v1/health"]
       interval: 15s
@@ -92,11 +93,11 @@ services:
     restart: always
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:4000}/api/v1
+      NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:4100}/api/v1
     depends_on:
       - api
     ports:
-      - "3000:3000"
+      - "${WEB_PORT:-3100}:3000"
 
 volumes:
   postgres_data:

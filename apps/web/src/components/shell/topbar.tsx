@@ -1,8 +1,10 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bell, LogOut, Search, Settings, User } from 'lucide-react';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { toast } from 'sonner';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useNotifications, useUnreadCount, useMarkAllRead } from '@/features/dashboard/api';
 import { formatDate } from '@/lib/utils';
 import {
@@ -15,6 +17,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useAuthStore } from '@/stores/auth-store';
 import { useLogout } from '@/features/auth/api';
+import { useMyProfile } from '@/features/users/self-profile';
+import { getAudioContextConstructor, playNotificationTone } from '@/features/notifications/sound';
+import { useNotificationPreferences } from '@/stores/notification-preferences';
 
 /** Build initials from a full name, e.g. "Budi Santoso" → "BS". */
 function initials(name?: string) {
@@ -26,18 +31,91 @@ function initials(name?: string) {
     .join('');
 }
 
+const ROLE_LABEL: Record<string, string> = {
+  ADMIN: 'Chủ cửa hàng',
+  HR: 'Nhân sự',
+  MANAGER: 'Quản lý',
+  EMPLOYEE: 'Nhân viên',
+};
+
 export function Topbar() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const setAuth = useAuthStore((s) => s.setAuth);
   const logout = useLogout();
+  const { data: profile } = useMyProfile();
   const { data: notifications } = useNotifications();
   const { data: unread } = useUnreadCount();
   const markAll = useMarkAllRead();
+  const soundEnabled = useNotificationPreferences((state) => state.soundEnabled);
+  const notificationVolume = useNotificationPreferences((state) => state.volume);
+  const notificationTone = useNotificationPreferences((state) => state.tone);
+  const knownNotificationIds = useRef<Set<string> | null>(null);
+  const audioContext = useRef<AudioContext | null>(null);
+  const [browserPermission, setBrowserPermission] = useState<NotificationPermission | 'unsupported'>('unsupported');
+
+  useEffect(() => {
+    if ('Notification' in window) setBrowserPermission(window.Notification.permission);
+
+    const armAudio = () => {
+      if (audioContext.current) return;
+      const AudioContext = getAudioContextConstructor();
+      if (!AudioContext) return;
+      audioContext.current = new AudioContext();
+      void audioContext.current.resume();
+    };
+    window.addEventListener('pointerdown', armAudio, { once: true });
+    return () => window.removeEventListener('pointerdown', armAudio);
+  }, []);
+
+  useEffect(() => {
+    if (!notifications) return;
+    const ids = new Set(notifications.map((notification) => notification.id));
+    if (!knownNotificationIds.current) {
+      knownNotificationIds.current = ids;
+      return;
+    }
+
+    const incoming = notifications.filter((notification) => !knownNotificationIds.current!.has(notification.id));
+    knownNotificationIds.current = ids;
+    if (!incoming.length) return;
+
+    for (const notification of incoming) {
+      toast(notification.title, { description: notification.body ?? undefined });
+      if (soundEnabled) playNotificationTone(audioContext.current, notificationTone, notificationVolume);
+      if (document.hidden && 'Notification' in window && window.Notification.permission === 'granted') {
+        const browserNotification = new window.Notification(notification.title, {
+          body: notification.body ?? undefined,
+          tag: notification.id,
+        });
+        browserNotification.onclick = () => window.focus();
+      }
+    }
+  }, [notificationTone, notificationVolume, notifications, soundEnabled]);
+
+  useEffect(() => {
+    const auth = useAuthStore.getState();
+    if (!profile || !auth.user || !auth.accessToken || !auth.refreshToken) return;
+    if (auth.user.fullName === profile.fullName && auth.user.avatarUrl === profile.avatarUrl && auth.user.avatarCropUrl === profile.avatarCropUrl) return;
+    setAuth({
+      accessToken: auth.accessToken,
+      refreshToken: auth.refreshToken,
+      user: { ...auth.user, fullName: profile.fullName, avatarUrl: profile.avatarUrl, avatarCropUrl: profile.avatarCropUrl },
+    });
+  }, [profile, setAuth]);
 
   const openPalette = () =>
     document.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }),
     );
+
+  const requestBrowserNotifications = async () => {
+    if (!('Notification' in window)) return;
+    const permission = await window.Notification.requestPermission();
+    setBrowserPermission(permission);
+    if (permission === 'granted') toast.success('Đã bật thông báo trình duyệt');
+    else toast.error('Thông báo trình duyệt chưa được cấp quyền');
+  };
 
   return (
     <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-canvas/80 px-6 backdrop-blur">
@@ -46,7 +124,7 @@ export function Topbar() {
         className="flex w-72 items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm text-ink-subtle transition-colors hover:bg-card"
       >
         <Search className="size-4" />
-        <span className="flex-1 text-left">Cari…</span>
+        <span className="flex-1 text-left">Tìm kiếm…</span>
         <kbd className="rounded-md border border-border bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-ink-subtle">
           ⌘K
         </kbd>
@@ -56,7 +134,7 @@ export function Topbar() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
-              aria-label="Notifikasi"
+              aria-label="Thông báo"
               className="relative flex size-9 items-center justify-center rounded-xl border border-border bg-card text-ink-muted transition-colors hover:bg-canvas"
             >
               <Bell className="size-4" />
@@ -69,14 +147,22 @@ export function Topbar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80">
             <div className="flex items-center justify-between px-2.5 py-1.5">
-              <span className="text-xs font-medium text-ink-subtle">Notifikasi</span>
+              <span className="text-xs font-medium text-ink-subtle">Thông báo</span>
               {(unread?.count ?? 0) > 0 && (
                 <button onClick={() => markAll.mutate()} className="text-xs text-purple-700 hover:underline">
-                  Tandai semua dibaca
+                  Đánh dấu đã đọc
                 </button>
               )}
             </div>
             <DropdownMenuSeparator />
+            {browserPermission !== 'unsupported' && browserPermission !== 'granted' && (
+              <>
+                <DropdownMenuItem onSelect={requestBrowserNotifications}>
+                  Bật thông báo trên trình duyệt
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
             <div className="max-h-80 overflow-y-auto">
               {notifications?.length ? (
                 notifications.slice(0, 12).map((n) => (
@@ -87,22 +173,33 @@ export function Topbar() {
                   </div>
                 ))
               ) : (
-                <div className="px-2.5 py-6 text-center text-sm text-ink-subtle">Tidak ada notifikasi</div>
+                <div className="px-2.5 py-6 text-center text-sm text-ink-subtle">Không có thông báo</div>
               )}
             </div>
           </DropdownMenuContent>
         </DropdownMenu>
 
+        <button
+          type="button"
+          aria-label="Cài đặt"
+          title="Cài đặt"
+          onClick={() => router.push('/dashboard/pengaturan')}
+          className="flex size-9 items-center justify-center rounded-xl border border-border bg-card text-ink-muted transition-colors hover:bg-canvas hover:text-ink"
+        >
+          <Settings className="size-4" />
+        </button>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex items-center gap-2.5 rounded-xl border border-border bg-card py-1 pl-1 pr-3 transition-colors hover:bg-canvas">
               <Avatar className="size-7">
+                {user?.avatarCropUrl || user?.avatarUrl ? <AvatarImage src={user.avatarCropUrl ?? user.avatarUrl ?? undefined} alt={user.fullName} /> : null}
                 <AvatarFallback className="text-xs">{initials(user?.fullName)}</AvatarFallback>
               </Avatar>
               <div className="hidden text-left sm:block">
                 <div className="text-sm font-medium leading-tight">{user?.fullName}</div>
                 <div className="text-xs leading-tight text-ink-subtle">
-                  {user?.roles.join(', ')}
+                  {user?.roles.map((role) => ROLE_LABEL[role] ?? role).join(', ')}
                 </div>
               </div>
             </button>
@@ -111,10 +208,7 @@ export function Topbar() {
             <DropdownMenuLabel>{user?.email}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => router.push('/dashboard/profil')}>
-              <User /> Profil
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => router.push('/dashboard/pengaturan')}>
-              <Settings /> Pengaturan
+              <User /> Hồ sơ
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -123,7 +217,7 @@ export function Topbar() {
                 logout.mutate(undefined, { onSuccess: () => router.replace('/login') })
               }
             >
-              <LogOut /> Keluar
+              <LogOut /> Đăng xuất
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

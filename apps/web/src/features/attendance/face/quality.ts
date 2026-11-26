@@ -9,8 +9,8 @@ export interface QualityResult {
   boxSize: number;
 }
 
-const MIN_SCORE = 0.7;
-const MIN_BOX = 100; // px — face must be large enough / close enough
+const MIN_SCORE = 0.5;
+const MIN_BOX = 80; // px — face must still be large enough for reliable matching
 
 /**
  * Client-side quality gates: detection confidence and face-box size.
@@ -22,10 +22,10 @@ export function checkQuality(detection: FaceDetection): QualityResult {
   const boxSize = Math.min(box.width, box.height);
 
   if (score < MIN_SCORE) {
-    return { ok: false, reason: 'Wajah kurang jelas — perbaiki pencahayaan', score, boxSize };
+    return { ok: false, reason: 'Khuôn mặt chưa rõ — vui lòng cải thiện ánh sáng', score, boxSize };
   }
   if (boxSize < MIN_BOX) {
-    return { ok: false, reason: 'Mendekatlah ke kamera', score, boxSize };
+    return { ok: false, reason: 'Hãy tiến gần camera hơn', score, boxSize };
   }
   return { ok: true, score, boxSize };
 }

@@ -7,7 +7,7 @@ import type { Message } from './api';
 
 /** Socket base = API origin without the /api/v1 path; namespace is /chat. */
 function socketUrl() {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
+  const base = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4100/api/v1';
   return base.replace(/\/api\/v1\/?$/, '');
 }
 

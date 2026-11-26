@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '@nexus/database';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { NotificationService } from '../../core/notification/notification.service';

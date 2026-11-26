@@ -21,7 +21,7 @@ export default function ProyekPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Proyek" description="Kelola proyek, milestone, dan progres" action={<CreateDialog />} />
+      <PageHeader title="Dự án" description="Theo dõi dự án, mốc công việc và tiến độ" action={<CreateDialog />} />
 
       {isLoading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -46,7 +46,7 @@ export default function ProyekPage() {
               </div>
               <div className="mt-4">
                 <div className="mb-1 flex justify-between text-xs text-ink-muted">
-                  <span>Progres</span>
+                  <span>Tiến độ</span>
                   <span>{p.progress}%</span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-canvas">
@@ -54,17 +54,17 @@ export default function ProyekPage() {
                 </div>
               </div>
               <div className="mt-4 flex justify-between text-xs text-ink-muted">
-                <span>{p._count.tasks} tugas · {p._count.members} anggota</span>
+                <span>{p._count.tasks} công việc · {p._count.members} thành viên</span>
                 {p.deadline && <span>{formatDate(p.deadline)}</span>}
               </div>
               <div className="mt-1 text-xs text-ink-subtle">
-                Anggaran: {formatCurrency(Number(p.budgetPlanned))}
+                Ngân sách: {formatCurrency(Number(p.budgetPlanned))}
               </div>
             </button>
           ))}
         </div>
       ) : (
-        <EmptyState title="Belum ada proyek" description="Buat proyek pertama Anda." />
+        <EmptyState title="Chưa có dự án" description="Tạo dự án đầu tiên để bắt đầu." />
       )}
     </div>
   );
@@ -93,15 +93,15 @@ function CreateDialog() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button>
-          <Plus /> Proyek Baru
+          <Plus /> Tạo dự án
         </Button>
       </DialogTrigger>
       <DialogContent className="p-6">
-        <DialogTitle className="text-lg font-medium">Proyek Baru</DialogTitle>
+        <DialogTitle className="text-lg font-medium">Tạo dự án</DialogTitle>
         <form onSubmit={onSubmit} className="mt-4 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <Label>Nama</Label>
+              <Label>Tên dự án</Label>
               <Input name="name" required placeholder="Website Revamp" />
             </div>
             <div>
@@ -111,10 +111,10 @@ function CreateDialog() {
             <div>
               <Label>Status</Label>
               <Select name="status" defaultValue="PLANNING">
-                <option value="PLANNING">Planning</option>
-                <option value="ACTIVE">Active</option>
-                <option value="COMPLETED">Completed</option>
-                <option value="CANCELLED">Cancelled</option>
+                <option value="PLANNING">Lập kế hoạch</option>
+                <option value="ACTIVE">Đang thực hiện</option>
+                <option value="COMPLETED">Hoàn thành</option>
+                <option value="CANCELLED">Đã hủy</option>
               </Select>
             </div>
             <div>
@@ -122,16 +122,16 @@ function CreateDialog() {
               <Input name="deadline" type="date" />
             </div>
             <div>
-              <Label>Anggaran (IDR)</Label>
+              <Label>Ngân sách (VND)</Label>
               <Input name="budgetPlanned" type="number" min="0" placeholder="50000000" />
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Batal
+              Hủy
             </Button>
             <Button type="submit" disabled={create.isPending}>
-              {create.isPending ? 'Menyimpan…' : 'Buat'}
+              {create.isPending ? 'Đang lưu…' : 'Tạo dự án'}
             </Button>
           </div>
         </form>

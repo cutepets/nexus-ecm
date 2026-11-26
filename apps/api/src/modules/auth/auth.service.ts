@@ -25,8 +25,8 @@ export class AuthService {
 
   // ---- Public API ----
 
-  async login(email: string, plainPassword: string, ctx: { ip?: string; ua?: string }) {
-    const user = await this.users.findByEmail(email);
+  async login(identifier: string, plainPassword: string, ctx: { ip?: string; ua?: string }) {
+    const user = await this.users.findByLoginIdentifier(identifier);
     if (!user || !user.isActive) throw new UnauthorizedException('Invalid credentials');
 
     const ok = await this.password.verify(user.passwordHash, plainPassword);
@@ -79,7 +79,9 @@ export class AuthService {
   async logout(refreshToken: string, userId: string, ctx: { ip?: string; ua?: string }) {
     const tokenHash = this.sha256(refreshToken);
     await this.prisma.refreshToken.updateMany({
-      where: { tokenHash, revokedAt: null },
+      // A valid access token must never be able to revoke a different user's
+      // refresh session when that token value is supplied by a malicious client.
+      where: { tokenHash, userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
     await this.audit(userId, 'LOGOUT', 'User', userId, ctx);
@@ -142,7 +144,9 @@ export class AuthService {
       id: user.id,
       email: user.email,
       fullName: user.fullName,
-      avatarUrl: user.avatarUrl,
+      avatarUrl: user.avatarPortraitUrl ?? user.avatarUrl,
+      avatarPortraitUrl: user.avatarPortraitUrl,
+      avatarCropUrl: user.avatarCropUrl,
       roles: user.roles,
       permissions: user.permissions,
       employeeId: user.employeeId,

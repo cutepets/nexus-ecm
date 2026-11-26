@@ -1,7 +1,7 @@
-import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { RbacService } from './rbac.service';
-import { AssignRoleDto, CreateRoleDto, SetRolePermissionsDto } from './dto/rbac.dto';
+import { AssignRoleDto, CreateRoleDto, SetRolePermissionsDto, UpdateRoleDto } from './dto/rbac.dto';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 
 @ApiTags('rbac')
@@ -33,9 +33,23 @@ export class RbacController {
 
   @Put('roles/:id/permissions')
   @RequirePermissions('rbac:update')
-  @ApiOperation({ summary: 'Replace the permission set of a role' })
+  @ApiOperation({ summary: 'Replace the permission set of a role, including system roles' })
   setPermissions(@Param('id') id: string, @Body() dto: SetRolePermissionsDto) {
     return this.rbac.setRolePermissions(id, dto.permissionKeys);
+  }
+
+  @Patch('roles/:id')
+  @RequirePermissions('rbac:update')
+  @ApiOperation({ summary: 'Update a role description or custom role name' })
+  updateRole(@Param('id') id: string, @Body() dto: UpdateRoleDto) {
+    return this.rbac.updateRole(id, dto);
+  }
+
+  @Delete('roles/:id')
+  @RequirePermissions('rbac:delete')
+  @ApiOperation({ summary: 'Delete an unused custom role' })
+  deleteRole(@Param('id') id: string) {
+    return this.rbac.deleteRole(id);
   }
 
   @Post('users/:userId/roles')

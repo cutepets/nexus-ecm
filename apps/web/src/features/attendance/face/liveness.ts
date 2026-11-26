@@ -1,68 +1,133 @@
-'use client';
+"use client";
 
-import type { FaceDetection } from './detectFace';
+import type { FaceDetection } from "./detectFace";
 
-export type LivenessChallenge = 'blink' | 'turnLeft' | 'turnRight';
-
-/** Pick a random challenge to defeat printed-photo spoofing. */
-export function randomChallenge(): LivenessChallenge {
-  const all: LivenessChallenge[] = ['blink', 'turnLeft', 'turnRight'];
-  return all[Math.floor(Math.random() * all.length)];
-}
+export type LivenessChallenge = "blink" | "turnLeft" | "turnRight" | "smile";
+export type LivenessStage = "baseline" | "challenge" | "recover" | "passed";
 
 export const CHALLENGE_LABEL: Record<LivenessChallenge, string> = {
-  blink: 'Kedipkan mata Anda',
-  turnLeft: 'Tengok ke kiri',
-  turnRight: 'Tengok ke kanan',
+  blink: "Nháy mắt một lần, rồi mở mắt nhìn thẳng camera",
+  turnLeft: "Quay đầu sang bên trái của bạn, rồi nhìn thẳng lại camera",
+  turnRight: "Quay đầu sang bên phải của bạn, rồi nhìn thẳng lại camera",
+  smile: "Mỉm cười, rồi trở lại nét mặt bình thường",
 };
 
-/** Eye Aspect Ratio — drops sharply during a blink. */
-function eyeAspectRatio(eye: { x: number; y: number }[]): number {
-  const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
-    Math.hypot(a.x - b.x, a.y - b.y);
-  const vertical = dist(eye[1], eye[5]) + dist(eye[2], eye[4]);
-  const horizontal = 2 * dist(eye[0], eye[3]);
-  return horizontal === 0 ? 0 : vertical / horizontal;
+export function randomChallenge(): LivenessChallenge {
+  const challenges: LivenessChallenge[] = [
+    "blink",
+    "turnLeft",
+    "turnRight",
+    "smile",
+  ];
+  return challenges[Math.floor(Math.random() * challenges.length)];
 }
 
-/**
- * Stateful liveness detector. Feed it detections frame-by-frame; it returns
- * true once the active challenge is satisfied via landmark motion.
- */
+type FaceMetrics = { eyeRatio: number; noseOffset: number; happiness: number };
+const distance = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+  Math.hypot(a.x - b.x, a.y - b.y);
+const meanX = (points: { x: number }[]) =>
+  points.reduce((sum, point) => sum + point.x, 0) / points.length;
+
+function eyeRatio(points: { x: number; y: number }[]) {
+  if (points.length < 6) return 0;
+  const width = distance(points[0], points[3]);
+  return width
+    ? (distance(points[1], points[5]) + distance(points[2], points[4])) /
+        (2 * width)
+    : 0;
+}
+
+function metricsOf(detection: FaceDetection): FaceMetrics {
+  const landmarks = detection.landmarks;
+  const leftEye = landmarks.getLeftEye();
+  const rightEye = landmarks.getRightEye();
+  const eyeCentre = (meanX(leftEye) + meanX(rightEye)) / 2;
+  const eyeDistance = Math.max(Math.abs(meanX(rightEye) - meanX(leftEye)), 1);
+  return {
+    eyeRatio: (eyeRatio(leftEye) + eyeRatio(rightEye)) / 2,
+    noseOffset: (meanX(landmarks.getNose()) - eyeCentre) / eyeDistance,
+    happiness: detection.expressions.happy,
+  };
+}
+
+/** Requires `neutral → action → neutral`; a pre-posed still image cannot pass. */
 export class LivenessTracker {
-  private baselineNoseX: number | null = null;
-  private earBaseline: number | null = null;
-  private blinked = false;
+  private stage: LivenessStage = "baseline";
+  private neutralFrames = 0;
+  private baseline: FaceMetrics | null = null;
+  private actionStartedAt: number | null = null;
+  private completedAt: number | null = null;
 
-  constructor(public challenge: LivenessChallenge) {}
+  constructor(public readonly challenge: LivenessChallenge) {}
 
-  reset(challenge: LivenessChallenge) {
-    this.challenge = challenge;
-    this.baselineNoseX = null;
-    this.earBaseline = null;
-    this.blinked = false;
+  update(detection: FaceDetection): LivenessStage {
+    const current = metricsOf(detection);
+    if (this.stage === "baseline") {
+      if (!this.isNeutral(current, null)) {
+        this.neutralFrames = 0;
+        return this.stage;
+      }
+      this.neutralFrames += 1;
+      if (this.neutralFrames >= 7) {
+        this.baseline = current;
+        this.neutralFrames = 0;
+        this.stage = "challenge";
+      }
+      return this.stage;
+    }
+    if (this.stage === "challenge") {
+      if (this.matchesChallenge(current)) {
+        this.actionStartedAt = Date.now();
+        this.neutralFrames = 0;
+        this.stage = "recover";
+      }
+      return this.stage;
+    }
+    if (this.stage === "recover") {
+      this.neutralFrames = this.isNeutral(current, this.baseline)
+        ? this.neutralFrames + 1
+        : 0;
+      if (this.neutralFrames >= 5) {
+        this.completedAt = Date.now();
+        this.stage = "passed";
+      }
+    }
+    return this.stage;
   }
 
-  /** @returns true when the challenge has been passed. */
-  update(detection: FaceDetection): boolean {
-    const landmarks = detection.landmarks;
-    const box = detection.detection.box;
+  audit() {
+    return {
+      challenge: this.challenge,
+      baselineFramesRequired: 7,
+      recoveryFramesRequired: 5,
+      actionDurationMs:
+        this.actionStartedAt && this.completedAt
+          ? this.completedAt - this.actionStartedAt
+          : undefined,
+    };
+  }
 
-    if (this.challenge === 'blink') {
-      const ear =
-        (eyeAspectRatio(landmarks.getLeftEye()) + eyeAspectRatio(landmarks.getRightEye())) / 2;
-      if (this.earBaseline === null) this.earBaseline = ear;
-      // A blink is a transient drop below ~70% of the open-eye baseline.
-      if (ear < this.earBaseline * 0.7) this.blinked = true;
-      return this.blinked;
-    }
+  private isNeutral(current: FaceMetrics, baseline: FaceMetrics | null) {
+    const referenceEye = baseline?.eyeRatio ?? current.eyeRatio;
+    return (
+      current.eyeRatio >= Math.max(0.18, referenceEye * 0.8) &&
+      Math.abs(current.noseOffset) <= 0.11 &&
+      current.happiness <= 0.35
+    );
+  }
 
-    // Head turn: track nose x relative to face-box width.
-    const nose = landmarks.getNose()[3];
-    const relX = (nose.x - box.x) / box.width;
-    if (this.baselineNoseX === null) this.baselineNoseX = relX;
-    const delta = relX - this.baselineNoseX;
-    if (this.challenge === 'turnLeft') return delta < -0.12;
-    return delta > 0.12; // turnRight
+  private matchesChallenge(current: FaceMetrics) {
+    const baseline = this.baseline;
+    if (!baseline) return false;
+    if (this.challenge === "blink")
+      return current.eyeRatio <= Math.min(0.18, baseline.eyeRatio * 0.72);
+    if (this.challenge === "smile")
+      return current.happiness >= Math.max(0.55, baseline.happiness + 0.15);
+    // The preview is mirrored for the user while face-api reads the original
+    // video pixels. Therefore the raw horizontal landmark movement is the
+    // inverse of the user's perceived left/right direction.
+    if (this.challenge === "turnLeft")
+      return current.noseOffset >= baseline.noseOffset + 0.18;
+    return current.noseOffset <= baseline.noseOffset - 0.18;
   }
 }

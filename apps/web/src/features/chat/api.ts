@@ -40,7 +40,7 @@ export function useCreateConversation() {
     mutationFn: async (p: { type: string; name?: string; memberIds: string[] }) =>
       (await api.post<Conversation>('/chat/conversations', p)).data,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['chat', 'conversations'] }),
-    onError: (e) => toast.error(errMsg(e, 'Gagal membuat percakapan')),
+    onError: (e) => toast.error(errMsg(e, 'Không thể tạo cuộc trò chuyện')),
   });
 }
 /** Mark a conversation read → clears its unread badge in the conversation list. */
@@ -56,7 +56,7 @@ export function useCreateAnnouncement() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (p: Record<string, unknown>) => (await api.post('/chat/announcements', p)).data,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['chat', 'announcements'] }); toast.success('Pengumuman dikirim'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['chat', 'announcements'] }); toast.success('Đã gửi thông báo'); },
   });
 }
 

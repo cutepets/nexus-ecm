@@ -15,7 +15,7 @@ import { formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth-store';
 import { useLeaveRequests, useLeaveInbox, type LeaveRequest } from '@/features/leave/api';
 
-const STEP_LABEL = ['', 'Supervisor', 'Manager', 'HR'];
+const STEP_LABEL = ['', 'Quản lý trực tiếp', 'Quản lý', 'Nhân sự'];
 
 export default function CutiPage() {
   const router = useRouter();
@@ -27,7 +27,7 @@ export default function CutiPage() {
     () => [
       {
         accessorKey: 'employee',
-        header: 'Karyawan',
+        header: 'Nhân viên',
         cell: ({ row }) => (
           <div>
             <div className="font-medium">{row.original.employee.fullName}</div>
@@ -37,15 +37,15 @@ export default function CutiPage() {
       },
       {
         id: 'period',
-        header: 'Periode',
+        header: 'Thời gian nghỉ',
         cell: ({ row }) => `${formatDate(row.original.startDate)} – ${formatDate(row.original.endDate)}`,
       },
       {
         id: 'step',
-        header: 'Tahap',
+        header: 'Bước duyệt',
         cell: ({ row }) =>
           row.original.status === 'PENDING' ? (
-            <Badge tone="amber">Menunggu {STEP_LABEL[row.original.currentStep]}</Badge>
+            <Badge tone="amber">Chờ {STEP_LABEL[row.original.currentStep]}</Badge>
           ) : (
             '—'
           ),
@@ -62,12 +62,12 @@ export default function CutiPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Cuti"
-        description="Pengajuan dan persetujuan cuti"
+        title="Nghỉ phép"
+        description="Gửi và phê duyệt đơn nghỉ phép"
         action={
           <Button asChild>
             <Link href="/dashboard/cuti/baru">
-              <Plus /> Ajukan Cuti
+              <Plus /> Tạo đơn nghỉ phép
             </Link>
           </Button>
         }
@@ -75,8 +75,8 @@ export default function CutiPage() {
 
       <Tabs defaultValue="all">
         <TabsList>
-          <TabsTrigger value="all">Semua Pengajuan</TabsTrigger>
-          {canApprove && <TabsTrigger value="inbox">Inbox Persetujuan</TabsTrigger>}
+          <TabsTrigger value="all">Tất cả đơn</TabsTrigger>
+          {canApprove && <TabsTrigger value="inbox">Đơn chờ duyệt</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="all">
@@ -84,8 +84,8 @@ export default function CutiPage() {
             columns={baseColumns}
             data={requests ?? []}
             loading={isLoading}
-            searchPlaceholder="Cari karyawan…"
-            emptyTitle="Belum ada pengajuan cuti"
+            searchPlaceholder="Tìm nhân viên…"
+            emptyTitle="Chưa có đơn nghỉ phép"
             onRowClick={(r) => router.push(`/dashboard/cuti/${r.id}`)}
           />
         </TabsContent>
@@ -96,8 +96,8 @@ export default function CutiPage() {
               columns={baseColumns}
               data={inbox ?? []}
               loading={inboxLoading}
-              searchPlaceholder="Cari karyawan…"
-              emptyTitle="Tidak ada pengajuan menunggu persetujuan"
+              searchPlaceholder="Tìm nhân viên…"
+              emptyTitle="Không có đơn đang chờ duyệt"
               onRowClick={(r) => router.push(`/dashboard/cuti/${r.id}`)}
             />
           </TabsContent>

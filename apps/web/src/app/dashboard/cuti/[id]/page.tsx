@@ -28,17 +28,17 @@ export default function LeaveDetailPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Detail Pengajuan Cuti"
+        title="Chi tiết đơn nghỉ phép"
         action={
           isPending && (
             <Button
               variant="secondary"
               onClick={() =>
-                confirm('Tarik pengajuan ini?') &&
+                confirm('Bạn có muốn rút đơn này?') &&
                 withdraw.mutate(id, { onSuccess: () => router.push('/dashboard/cuti') })
               }
             >
-              Tarik Pengajuan
+              Rút đơn
             </Button>
           )
         }
@@ -58,15 +58,15 @@ export default function LeaveDetailPage() {
             </div>
             <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
               <div>
-                <div className="text-xs text-ink-subtle">Mulai</div>
+                <div className="text-xs text-ink-subtle">Bắt đầu</div>
                 <div>{formatDate(data.startDate)}</div>
               </div>
               <div>
-                <div className="text-xs text-ink-subtle">Selesai</div>
+                <div className="text-xs text-ink-subtle">Kết thúc</div>
                 <div>{formatDate(data.endDate)}</div>
               </div>
               <div className="col-span-2">
-                <div className="text-xs text-ink-subtle">Alasan</div>
+                <div className="text-xs text-ink-subtle">Lý do</div>
                 <div>{data.reason}</div>
               </div>
             </div>
@@ -78,7 +78,7 @@ export default function LeaveDetailPage() {
               <Textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                placeholder="Komentar (opsional)"
+                placeholder="Ghi chú (không bắt buộc)"
                 className="mt-3"
               />
               <div className="mt-3 flex gap-3">
@@ -87,13 +87,13 @@ export default function LeaveDetailPage() {
                   disabled={decide.isPending}
                   onClick={() => decide.mutate({ decision: 'REJECTED', comment })}
                 >
-                  <X /> Tolak
+                  <X /> Từ chối
                 </Button>
                 <Button
                   disabled={decide.isPending}
                   onClick={() => decide.mutate({ decision: 'APPROVED', comment })}
                 >
-                  <Check /> Setujui
+                  <Check /> Phê duyệt
                 </Button>
               </div>
             </div>
@@ -102,7 +102,7 @@ export default function LeaveDetailPage() {
 
         {/* Approval timeline */}
         <div className="rounded-card border border-border bg-card p-6 shadow-card">
-          <h3 className="mb-4 text-base font-medium">Alur Persetujuan</h3>
+          <h3 className="mb-4 text-base font-medium">Quy trình phê duyệt</h3>
           <ol className="space-y-4">
             {data.approvals.map((a) => (
               <TimelineStep key={a.id} approval={a} active={isPending && a.step === data.currentStep} />
@@ -144,10 +144,10 @@ function TimelineStep({ approval, active }: { approval: LeaveApproval; active: b
         <div className="text-xs text-ink-subtle">
           {approval.decision === 'PENDING'
             ? active
-              ? 'Menunggu keputusan'
-              : 'Belum diproses'
-            : `${approval.decision === 'APPROVED' ? 'Disetujui' : 'Ditolak'}${
-                approval.approver ? ` oleh ${approval.approver.fullName}` : ''
+              ? 'Đang chờ xử lý'
+              : 'Chưa đến bước duyệt'
+            : `${approval.decision === 'APPROVED' ? 'Đã phê duyệt' : 'Đã từ chối'}${
+                approval.approver ? ` bởi ${approval.approver.fullName}` : ''
               }`}
         </div>
         {approval.comment && <div className="mt-0.5 text-xs text-ink-muted">“{approval.comment}”</div>}

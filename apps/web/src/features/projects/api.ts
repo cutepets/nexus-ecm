@@ -51,9 +51,9 @@ export function useCreateProject() {
       (await api.post<ProjectListItem>('/projects', payload)).data,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keys.all });
-      toast.success('Proyek dibuat');
+      toast.success('Đã tạo dự án');
     },
-    onError: (e) => toast.error(errMsg(e, 'Gagal membuat proyek')),
+    onError: (e) => toast.error(errMsg(e, 'Không thể tạo dự án')),
   });
 }
 
@@ -63,7 +63,7 @@ export function useAddMilestone(projectId: string) {
     mutationFn: async (payload: { title: string; dueDate?: string }) =>
       (await api.post(`/projects/${projectId}/milestones`, payload)).data,
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.detail(projectId) }),
-    onError: (e) => toast.error(errMsg(e, 'Gagal menambah milestone')),
+    onError: (e) => toast.error(errMsg(e, 'Không thể thêm mốc công việc')),
   });
 }
 

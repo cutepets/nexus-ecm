@@ -81,7 +81,7 @@ export class LeaveService {
       where: { id: dto.employeeId, deletedAt: null },
       select: { id: true, fullName: true, managerId: true },
     });
-    if (!employee) throw new NotFoundException('Employee not found');
+    if (!employee) throw new NotFoundException('Không tìm thấy nhân viên');
 
     const leaveType = await this.prisma.leaveType.findUnique({ where: { id: dto.leaveTypeId } });
     if (!leaveType) throw new BadRequestException('Leave type not found');

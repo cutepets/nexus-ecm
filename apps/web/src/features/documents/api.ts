@@ -28,15 +28,15 @@ export function useCreateFolder() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (p: Record<string, unknown>) => (await api.post('/documents/folders', p)).data,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['folders'] }); toast.success('Folder dibuat'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['folders'] }); toast.success('Đã tạo thư mục'); },
   });
 }
 export function useCreateDocument() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (p: Record<string, unknown>) => (await api.post('/documents', p)).data,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['documents'] }); toast.success('Dokumen dibuat'); },
-    onError: (e) => toast.error(errMsg(e, 'Gagal membuat dokumen')),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['documents'] }); toast.success('Đã tạo tài liệu'); },
+    onError: (e) => toast.error(errMsg(e, 'Không thể tạo tài liệu')),
   });
 }
 
@@ -51,9 +51,9 @@ export function useUploadVersion(documentId: string) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['documents'] });
-      toast.success('Versi diunggah');
+      toast.success('Đã tải phiên bản lên');
     },
-    onError: (e) => toast.error(errMsg(e, 'Gagal mengunggah versi')),
+    onError: (e) => toast.error(errMsg(e, 'Không thể tải phiên bản lên')),
   });
 }
 

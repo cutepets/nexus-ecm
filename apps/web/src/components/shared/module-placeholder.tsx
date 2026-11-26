@@ -20,8 +20,8 @@ export function ModulePlaceholder({ title, description, phase, icon }: ModulePla
       <PageHeader title={title} description={description} />
       <EmptyState
         icon={icon ?? Construction}
-        title="Modul ini sedang dibangun"
-        description={`Akan tersedia pada ${phase}. Lihat docs/05-ROADMAP.md untuk rincian.`}
+        title="Tính năng đang được phát triển"
+        description={`Tính năng sẽ có ở ${phase}. Xem README để biết phạm vi hiện tại.`}
       />
     </div>
   );

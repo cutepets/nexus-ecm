@@ -11,7 +11,7 @@ export default function NewEmployeePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Tambah Karyawan" description="Lengkapi data karyawan baru" />
+      <PageHeader title="Thêm nhân viên" />
       <EmployeeForm
         submitting={create.isPending}
         onSubmit={(values) =>

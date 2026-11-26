@@ -32,7 +32,7 @@ export class CreateSalaryHistoryDto {
   @IsNumberString()
   amount!: string;
 
-  @ApiProperty({ required: false, default: 'IDR' })
+  @ApiProperty({ required: false, default: 'VND' })
   @IsOptional()
   @IsString()
   currency?: string;

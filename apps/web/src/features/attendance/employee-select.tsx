@@ -19,9 +19,9 @@ export function EmployeeSelect({
 
   return (
     <div className="mx-auto max-w-md">
-      <Label>Karyawan</Label>
+      <Label>Nhân viên</Label>
       <Select value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="">— Pilih karyawan —</option>
+        <option value="">— Chọn nhân viên —</option>
         {data?.items.map((e) => (
           <option key={e.id} value={e.id}>
             {e.fullName} · {e.employeeNo}

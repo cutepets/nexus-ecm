@@ -6,9 +6,6 @@ export const PERMISSION_MODULES = [
   'leave',
   'project',
   'task',
-  'finance',
-  'inventory',
-  'crm',
   'document',
   'chat',
   'notification',
@@ -20,7 +17,7 @@ export const PERMISSION_MODULES = [
 
 export type PermissionModule = (typeof PERMISSION_MODULES)[number];
 
-export const DEFAULT_ROLES = ['SUPER_ADMIN', 'HR', 'FINANCE', 'MANAGER', 'EMPLOYEE'] as const;
+export const DEFAULT_ROLES = ['ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'] as const;
 export type DefaultRole = (typeof DEFAULT_ROLES)[number];
 
 /** Helper to build a permission key, e.g. perm('employee', 'create') -> 'employee:create' */

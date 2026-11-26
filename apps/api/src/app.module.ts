@@ -15,13 +15,12 @@ import { EmployeesModule } from './modules/employees/employees.module';
 import { AttendanceModule } from './modules/attendance/attendance.module';
 import { LeaveModule } from './modules/leave/leave.module';
 import { ProjectsModule } from './modules/projects/projects.module';
-import { CustomersModule } from './modules/customers/customers.module';
-import { FinanceModule } from './modules/finance/finance.module';
-import { InventoryModule } from './modules/inventory/inventory.module';
-import { CrmModule } from './modules/crm/crm.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { SettingsModule } from './modules/settings/settings.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { PayrollModule } from './modules/payroll/payroll.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 
@@ -47,13 +46,12 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     AttendanceModule,
     LeaveModule,
     ProjectsModule,
-    CustomersModule,
-    FinanceModule,
-    InventoryModule,
-    CrmModule,
     DocumentsModule,
     ChatModule,
     DashboardModule,
+    SettingsModule,
+    IntegrationsModule,
+    PayrollModule,
   ],
   providers: [
     // Order matters: throttle → authenticate → authorize.

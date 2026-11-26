@@ -39,21 +39,21 @@ export function TaskCreateDialog({ projectId }: { projectId?: string }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button>
-          <Plus /> Tugas Baru
+          <Plus /> Tạo công việc
         </Button>
       </DialogTrigger>
       <DialogContent className="p-6">
-        <DialogTitle className="text-lg font-medium">Tugas Baru</DialogTitle>
+        <DialogTitle className="text-lg font-medium">Tạo công việc</DialogTitle>
         <form onSubmit={onSubmit} className="mt-4 space-y-4">
           <div>
-            <Label>Judul</Label>
-            <Input name="title" required placeholder="Apa yang harus dikerjakan?" />
+            <Label>Tiêu đề</Label>
+            <Input name="title" required placeholder="Công việc cần thực hiện là gì?" />
           </div>
           {!projectId && (
             <div>
-              <Label>Proyek</Label>
+              <Label>Dự án</Label>
               <Select name="projectId">
-                <option value="">— Tanpa proyek —</option>
+                <option value="">— Không thuộc dự án —</option>
                 {projects?.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
@@ -66,19 +66,19 @@ export function TaskCreateDialog({ projectId }: { projectId?: string }) {
             <div>
               <Label>Prioritas</Label>
               <Select name="priority" defaultValue="MEDIUM">
-                <option value="LOW">Rendah</option>
-                <option value="MEDIUM">Sedang</option>
-                <option value="HIGH">Tinggi</option>
-                <option value="CRITICAL">Kritis</option>
+                <option value="LOW">Thấp</option>
+                <option value="MEDIUM">Trung bình</option>
+                <option value="HIGH">Cao</option>
+                <option value="CRITICAL">Khẩn cấp</option>
               </Select>
             </div>
             <div>
               <Label>Status</Label>
               <Select name="status" defaultValue="TODO">
-                <option value="TODO">To Do</option>
-                <option value="IN_PROGRESS">In Progress</option>
-                <option value="REVIEW">Review</option>
-                <option value="DONE">Done</option>
+                <option value="TODO">Cần thực hiện</option>
+                <option value="IN_PROGRESS">Đang thực hiện</option>
+                <option value="REVIEW">Chờ duyệt</option>
+                <option value="DONE">Hoàn thành</option>
               </Select>
             </div>
             <div>
@@ -86,9 +86,9 @@ export function TaskCreateDialog({ projectId }: { projectId?: string }) {
               <Input name="dueDate" type="date" />
             </div>
             <div>
-              <Label>Penanggung Jawab</Label>
+              <Label>Người phụ trách</Label>
               <Select name="assigneeId">
-                <option value="">— Tidak ada —</option>
+                <option value="">— Chưa phân công —</option>
                 {employees?.items.map((e) => (
                   <option key={e.id} value={e.id}>
                     {e.fullName}
@@ -99,10 +99,10 @@ export function TaskCreateDialog({ projectId }: { projectId?: string }) {
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Batal
+              Hủy
             </Button>
             <Button type="submit" disabled={create.isPending}>
-              {create.isPending ? 'Menyimpan…' : 'Buat'}
+              {create.isPending ? 'Đang lưu…' : 'Tạo công việc'}
             </Button>
           </div>
         </form>

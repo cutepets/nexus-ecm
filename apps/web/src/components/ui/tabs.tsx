@@ -34,7 +34,7 @@ export function TabsList({ className, children }: { className?: string; children
   );
 }
 
-export function TabsTrigger({ value, children }: { value: string; children: React.ReactNode }) {
+export function TabsTrigger({ value, className, children }: { value: string; className?: string; children: React.ReactNode }) {
   const ctx = React.useContext(TabsContext)!;
   const active = ctx.value === value;
   return (
@@ -43,6 +43,7 @@ export function TabsTrigger({ value, children }: { value: string; children: Reac
       className={cn(
         'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
         active ? 'bg-canvas text-ink' : 'text-ink-muted hover:text-ink',
+        className,
       )}
     >
       {children}
@@ -50,8 +51,8 @@ export function TabsTrigger({ value, children }: { value: string; children: Reac
   );
 }
 
-export function TabsContent({ value, children }: { value: string; children: React.ReactNode }) {
+export function TabsContent({ value, className, children }: { value: string; className?: string; children: React.ReactNode }) {
   const ctx = React.useContext(TabsContext)!;
   if (ctx.value !== value) return null;
-  return <div className="mt-4">{children}</div>;
+  return <div className={cn('mt-4', className)}>{children}</div>;
 }

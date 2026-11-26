@@ -63,9 +63,9 @@ export default function TaskDetailPage() {
         action={
           <Button
             variant="danger"
-            onClick={() => confirm('Hapus tugas ini?') && del.mutate(id, { onSuccess: () => router.push('/dashboard/tugas') })}
+            onClick={() => confirm('Bạn có muốn xóa công việc này?') && del.mutate(id, { onSuccess: () => router.push('/dashboard/tugas') })}
           >
-            <Trash2 /> Hapus
+            <Trash2 /> Xóa
           </Button>
         }
       />
@@ -82,7 +82,7 @@ export default function TaskDetailPage() {
           {/* Checklist */}
           <div className="rounded-card border border-border bg-card p-6 shadow-card">
             <h3 className="mb-3 text-base font-medium">
-              Checklist <span className="text-sm text-ink-subtle">({doneCount}/{task.checklist.length})</span>
+              Danh sách kiểm tra <span className="text-sm text-ink-subtle">({doneCount}/{task.checklist.length})</span>
             </h3>
             <ul className="space-y-2">
               {task.checklist.map((c) => (
@@ -95,16 +95,16 @@ export default function TaskDetailPage() {
               ))}
             </ul>
             <form onSubmit={onAddCheck} className="mt-3 flex gap-2">
-              <Input name="label" placeholder="Tambah item…" />
+              <Input name="label" placeholder="Thêm mục…" />
               <Button type="submit" variant="secondary" disabled={addCheck.isPending}>
-                Tambah
+                Thêm
               </Button>
             </form>
           </div>
 
           {/* Comments */}
           <div className="rounded-card border border-border bg-card p-6 shadow-card">
-            <h3 className="mb-3 text-base font-medium">Komentar</h3>
+            <h3 className="mb-3 text-base font-medium">Bình luận</h3>
             <ul className="space-y-3">
               {task.comments.map((c) => (
                 <li key={c.id} className="flex gap-3">
@@ -120,11 +120,11 @@ export default function TaskDetailPage() {
                   </div>
                 </li>
               ))}
-              {!task.comments.length && <p className="text-sm text-ink-subtle">Belum ada komentar.</p>}
+              {!task.comments.length && <p className="text-sm text-ink-subtle">Chưa có bình luận.</p>}
             </ul>
             <form onSubmit={onComment} className="mt-3 flex gap-2">
-              <Input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Tulis komentar…" />
-              <Button type="submit" disabled={addComment.isPending}>Kirim</Button>
+              <Input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Viết bình luận…" />
+              <Button type="submit" disabled={addComment.isPending}>Gửi</Button>
             </form>
           </div>
         </div>
@@ -134,7 +134,7 @@ export default function TaskDetailPage() {
           <Meta label="Status"><StatusBadge status={task.status} /></Meta>
           <Meta label="Prioritas"><Badge tone={PRIORITY_TONE[task.priority]}>{PRIORITY_LABEL[task.priority]}</Badge></Meta>
           <Meta label="Tenggat">{task.dueDate ? formatDate(task.dueDate) : '—'}</Meta>
-          <Meta label="Penanggung Jawab">
+          <Meta label="Người phụ trách">
             <div className="flex flex-wrap gap-1.5">
               {task.assignees.length
                 ? task.assignees.map((a) => (

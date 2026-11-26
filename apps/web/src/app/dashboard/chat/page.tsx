@@ -32,11 +32,11 @@ function initials(name: string) {
 export default function ChatPage() {
   return (
     <div className="space-y-6">
-      <PageHeader title="Chat" description="Komunikasi internal realtime" />
+      <PageHeader title="Trao đổi nội bộ" description="Trao đổi công việc theo thời gian thực" />
       <Tabs defaultValue="chat">
         <TabsList>
-          <TabsTrigger value="chat">Percakapan</TabsTrigger>
-          <TabsTrigger value="announcements">Pengumuman</TabsTrigger>
+          <TabsTrigger value="chat">Tin nhắn</TabsTrigger>
+          <TabsTrigger value="announcements">Thông báo</TabsTrigger>
         </TabsList>
         <TabsContent value="chat"><ChatView /></TabsContent>
         <TabsContent value="announcements"><Announcements /></TabsContent>
@@ -80,13 +80,13 @@ function ChatView() {
   };
 
   const title = (c: { name?: string | null; members: { user: { id: string; fullName: string } }[] }) =>
-    c.name ?? (c.members.filter((m) => m.user.id !== me?.id).map((m) => m.user.fullName).join(', ') || 'Saya');
+    c.name ?? (c.members.filter((m) => m.user.id !== me?.id).map((m) => m.user.fullName).join(', ') || 'Tôi');
 
   return (
     <div className="grid h-[70vh] grid-cols-1 gap-4 lg:grid-cols-3">
       <div className="space-y-1 overflow-y-auto rounded-card border border-border bg-card p-2 shadow-card">
         <div className="flex items-center justify-between px-2 py-1">
-          <span className="text-sm font-medium">Percakapan</span>
+          <span className="text-sm font-medium">Tin nhắn</span>
           <NewConversationDialog onCreated={(id) => { refetch(); setActiveId(id); }} />
         </div>
         {conversations?.map((c) => (
@@ -98,12 +98,12 @@ function ChatView() {
             <Avatar className="size-8"><AvatarFallback className="text-xs">{initials(title(c))}</AvatarFallback></Avatar>
             <span className="flex-1 truncate">
               <span className="block font-medium">{title(c)}</span>
-              <span className="block truncate text-xs text-ink-subtle">{c.lastMessage?.body ?? 'Belum ada pesan'}</span>
+              <span className="block truncate text-xs text-ink-subtle">{c.lastMessage?.body ?? 'Chưa có tin nhắn'}</span>
             </span>
             {c.unread > 0 && <span className="rounded-full bg-accent-purple px-1.5 text-[10px] text-white">{c.unread}</span>}
           </button>
         ))}
-        {!conversations?.length && <p className="px-3 py-6 text-center text-sm text-ink-subtle">Belum ada percakapan</p>}
+        {!conversations?.length && <p className="px-3 py-6 text-center text-sm text-ink-subtle">Chưa có cuộc trò chuyện</p>}
       </div>
 
       <div className="flex flex-col rounded-card border border-border bg-card shadow-card lg:col-span-2">
@@ -121,13 +121,13 @@ function ChatView() {
               <div ref={bottomRef} />
             </div>
             <div className="flex gap-2 border-t border-border p-3">
-              <Input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder="Ketik pesan…" />
+              <Input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder="Nhập tin nhắn…" />
               <Button onClick={send}><Send /></Button>
             </div>
           </>
         ) : (
           <div className="flex flex-1 items-center justify-center">
-            <EmptyState title="Pilih percakapan" description="Atau mulai yang baru." />
+            <EmptyState title="Chọn cuộc trò chuyện" description="Hoặc bắt đầu cuộc trò chuyện mới." />
           </div>
         )}
       </div>
@@ -152,15 +152,15 @@ function NewConversationDialog({ onCreated }: { onCreated: (id: string) => void 
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild><Button size="icon" variant="ghost"><Plus /></Button></DialogTrigger>
       <DialogContent className="p-6">
-        <DialogTitle className="text-lg font-medium">Percakapan Baru</DialogTitle>
+        <DialogTitle className="text-lg font-medium">Cuộc trò chuyện mới</DialogTitle>
         <form onSubmit={onSubmit} className="mt-4 space-y-4">
-          <div><Label>Kirim ke</Label>
+          <div><Label>Gửi tới</Label>
             <Select name="userId" required>
-              <option value="">— Pilih pengguna —</option>
+              <option value="">— Chọn người nhận —</option>
               {users?.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}
             </Select>
           </div>
-          <div className="flex justify-end gap-3"><Button type="button" variant="secondary" onClick={() => setOpen(false)}>Batal</Button><Button type="submit">Mulai</Button></div>
+          <div className="flex justify-end gap-3"><Button type="button" variant="secondary" onClick={() => setOpen(false)}>Hủy</Button><Button type="submit">Bắt đầu</Button></div>
         </form>
       </DialogContent>
     </Dialog>
@@ -178,16 +178,16 @@ function Announcements() {
       {canPost && (
         <div className="flex justify-end">
           <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild><Button><Megaphone /> Pengumuman</Button></DialogTrigger>
+            <DialogTrigger asChild><Button><Megaphone /> Tạo thông báo</Button></DialogTrigger>
             <DialogContent className="p-6">
-              <DialogTitle className="text-lg font-medium">Pengumuman Baru</DialogTitle>
+              <DialogTitle className="text-lg font-medium">Tạo thông báo</DialogTitle>
               <form
                 onSubmit={(e) => { e.preventDefault(); const fd = new FormData(e.currentTarget); create.mutate({ title: String(fd.get('title')), body: String(fd.get('body')) }, { onSuccess: () => setOpen(false) }); }}
                 className="mt-4 space-y-4"
               >
-                <div><Label>Judul</Label><Input name="title" required /></div>
-                <div><Label>Isi</Label><Input name="body" required /></div>
-                <div className="flex justify-end gap-3"><Button type="button" variant="secondary" onClick={() => setOpen(false)}>Batal</Button><Button type="submit">Kirim</Button></div>
+                <div><Label>Tiêu đề</Label><Input name="title" required /></div>
+                <div><Label>Nội dung</Label><Input name="body" required /></div>
+                <div className="flex justify-end gap-3"><Button type="button" variant="secondary" onClick={() => setOpen(false)}>Hủy</Button><Button type="submit">Gửi</Button></div>
               </form>
             </DialogContent>
           </Dialog>
@@ -207,7 +207,7 @@ function Announcements() {
           ))}
         </div>
       ) : (
-        <EmptyState icon={Megaphone} title="Belum ada pengumuman" />
+        <EmptyState icon={Megaphone} title="Chưa có thông báo" />
       )}
     </div>
   );
