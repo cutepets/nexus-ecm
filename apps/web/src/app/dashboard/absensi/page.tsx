@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { useEmployees } from "@/features/employees/api";
 import { useBranches } from "@/features/settings/api";
+import { EnrollScanner } from "@/features/attendance/enroll-scanner";
 import {
   useAttendanceHistory,
   useAttendanceDetail,
@@ -2430,6 +2431,8 @@ function PersonalView() {
     [],
   );
   const [punchOpen, setPunchOpen] = useState(false);
+  const [faceEnrollOpen, setFaceEnrollOpen] = useState(false);
+  useEffect(() => { if (me && !me.enrolled) setFaceEnrollOpen(true); }, [me?.enrolled]);
   const today = me?.today;
   const sessionCount = today?.sessions.length ?? 0;
 
@@ -2464,10 +2467,17 @@ function PersonalView() {
 
       {me && !me.enrolled && (
         <div className="rounded-card border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          Khuôn mặt của bạn chưa được đăng ký. Hãy liên hệ bộ phận nhân sự trước
-          khi chấm công.
+          Khuôn mặt của bạn chưa được đăng ký. Hãy hoàn tất đăng ký để sử dụng chấm công.
         </div>
       )}
+      {employeeId && <Dialog open={faceEnrollOpen && !me?.enrolled} onOpenChange={setFaceEnrollOpen}>
+        <DialogContent className="p-6">
+          <DialogTitle>Đăng ký khuôn mặt chấm công</DialogTitle>
+          <DialogDescription className="mb-4">Chỉ cần đăng ký một lần. Muốn cập nhật, hãy liên hệ quản lý để xóa mẫu hiện tại trước.</DialogDescription>
+          <EnrollScanner employeeId={employeeId} onComplete={() => setFaceEnrollOpen(false)} />
+          <div className="mt-3 flex justify-end"><Button type="button" variant="secondary" onClick={() => setFaceEnrollOpen(false)}>Để sau</Button></div>
+        </DialogContent>
+      </Dialog>}
 
       <section className="rounded-card border border-border bg-card p-4 shadow-card sm:p-6">
         <DataTable

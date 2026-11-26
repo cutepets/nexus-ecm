@@ -584,9 +584,23 @@ export function useEnrollFace() {
     },
     onSuccess: (_d, v) => {
       qc.invalidateQueries({ queryKey: keys.faceStatus(v.employeeId) });
+      qc.invalidateQueries({ queryKey: ["attendance", "me-summary"] });
       toast.success("Đã đăng ký khuôn mặt");
     },
     onError: (e) => toast.error(errMsg(e, "Không thể đăng ký khuôn mặt")),
+  });
+}
+
+export function usePurgeFace(employeeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await api.delete(`/attendance/face/${employeeId}`)).data,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.faceStatus(employeeId) });
+      void qc.invalidateQueries({ queryKey: ["attendance"] });
+      toast.success("Đã xóa dữ liệu khuôn mặt; nhân viên có thể đăng ký lại.");
+    },
+    onError: (e) => toast.error(errMsg(e, "Không thể xóa khuôn mặt")),
   });
 }
 

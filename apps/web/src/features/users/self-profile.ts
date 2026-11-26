@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
+import { useAuthStore } from '@/stores/auth-store';
 
 export interface SelfProfile {
   id: string;
@@ -52,8 +53,10 @@ export function useUpdateMyProfile() {
 }
 
 export function useChangeMyPassword() {
+  const setMustChangePassword = useAuthStore((state) => state.setMustChangePassword);
   return useMutation({
     mutationFn: async (payload: { currentPassword: string; newPassword: string }) =>
       (await api.post<{ success: boolean }>('/users/me/change-password', payload)).data,
+    onSuccess: () => setMustChangePassword(false),
   });
 }

@@ -38,11 +38,10 @@ export default function EnrollPage() {
         <>
           {status?.enrolled && (
             <p className="text-center text-sm text-ink-muted">
-              <Badge tone="mint">Đã đăng ký</Badge> {status.profiles} mẫu — đăng ký lại
-              sẽ thay thế toàn bộ mẫu cũ.
+              <Badge tone="mint">Đã đăng ký</Badge> {status.profiles} mẫu. Hãy xóa mẫu trong hồ sơ nhân viên trước khi đăng ký lại.
             </p>
           )}
-          <EnrollScanner employeeId={employeeId} />
+          {!status?.enrolled && <EnrollScanner employeeId={employeeId} />}
         </>
       )}
     </div>

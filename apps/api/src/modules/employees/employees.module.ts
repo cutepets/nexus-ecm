@@ -6,8 +6,10 @@ import { DepartmentsService } from './departments.service';
 import { PositionsController } from './positions.controller';
 import { PositionsService } from './positions.service';
 import { EmployeesExcelService } from './employees-excel.service';
+import { RbacModule } from '../rbac/rbac.module';
 
 @Module({
+  imports: [RbacModule],
   controllers: [EmployeesController, DepartmentsController, PositionsController],
   providers: [EmployeesService, DepartmentsService, PositionsService, EmployeesExcelService],
 })

@@ -22,6 +22,7 @@ import {
   type Role,
 } from "@/features/rbac/api";
 import { useAuthStore } from "@/stores/auth-store";
+import { RoleAssignmentRulesSettings } from "./role-assignment-rules-settings";
 
 export function RolePermissionsSettings() {
   const hasPermission = useAuthStore((state) => state.hasPermission);
@@ -95,6 +96,8 @@ export function RolePermissionsSettings() {
   const canUpdate = hasPermission("rbac:update");
   const canCreate = hasPermission("rbac:create");
   const canDelete = hasPermission("rbac:delete");
+  const canEditSelectedPermissions = canUpdate && selected?.name !== "ADMIN";
+  const canManageAssignmentRules = canUpdate && hasPermission("rbac:read");
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -146,7 +149,7 @@ export function RolePermissionsSettings() {
                       <Pencil /> Sửa
                     </Button>
                   )}
-                  {!selected.isSystem && canDelete && (
+                  {selected.name !== "ADMIN" && canDelete && (
                     <Button
                       variant="danger"
                       size="sm"
@@ -173,7 +176,7 @@ export function RolePermissionsSettings() {
                       >
                         <input
                           type="checkbox"
-                          disabled={!canUpdate}
+                      disabled={!canEditSelectedPermissions}
                           checked={selectedKeys.includes(permission)}
                           onChange={() => toggle(permission)}
                         />
@@ -183,7 +186,7 @@ export function RolePermissionsSettings() {
                   </fieldset>
                 ))}
               </div>
-              {canUpdate && (
+              {canEditSelectedPermissions && (
                 <div className="mt-6 flex justify-end">
                   <Button
                     disabled={savePermissions.isPending}
@@ -202,6 +205,7 @@ export function RolePermissionsSettings() {
           )}
         </section>
       </div>
+      {canManageAssignmentRules && <RoleAssignmentRulesSettings />}
       <ConfirmDeleteDialog
         open={deleteOpen}
         title="Xóa role"

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Pencil, Trash2, Upload, FileText, ExternalLink, BriefcaseBusiness, ShieldCheck, Clock3 } from 'lucide-react';
+import { Pencil, Trash2, Upload, FileText, ExternalLink, BriefcaseBusiness, ShieldCheck, Clock3, KeyRound, ScanFace } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -23,7 +23,9 @@ import {
   useDeletionEligibility,
   useUploadDocument,
   useDeleteDocument,
+  useResetEmployeePassword,
 } from '@/features/employees/api';
+import { useFaceStatus, usePurgeFace } from '@/features/attendance/api';
 import { EmploymentUpdateDialog } from '@/features/employees/employment-update-dialog';
 
 const DOC_TYPES = ['KTP', 'NPWP', 'CV', 'CONTRACT', 'OTHER'];
@@ -44,15 +46,24 @@ export default function EmployeeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { data, isLoading, isError, refetch } = useEmployee(id);
+  const resetPassword = useResetEmployeePassword(id, data?.user?.id ?? '');
+  const { data: faceStatus } = useFaceStatus(id);
+  const purgeFace = usePurgeFace(id);
   const { data: eligibility } = useDeletionEligibility(id);
   const del = useDeleteEmployee();
   const user = useAuthStore((state) => state.user);
   const hasPermission = useAuthStore((state) => state.hasPermission);
   const canUpdate = hasPermission('employee:update');
+  const canResetPassword = hasPermission('user:reset-password');
+  const canManageFace = hasPermission('attendance:face:enroll');
   const canReadPayroll = hasPermission('payroll:read');
   const [employmentUpdateOpen, setEmploymentUpdateOpen] = useState(false);
   const [permanentDeleteOpen, setPermanentDeleteOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
+  const [resetActorPassword, setResetActorPassword] = useState('');
+  const [temporaryPassword, setTemporaryPassword] = useState('');
+  const [resetPasswordOpen, setResetPasswordOpen] = useState(false);
+  const [deleteFaceOpen, setDeleteFaceOpen] = useState(false);
   const canPermanentlyDelete = user?.roles.includes('ADMIN') && hasPermission('employee:delete');
 
   if (isLoading) {
@@ -105,6 +116,8 @@ export default function EmployeeDetailPage() {
                 <Pencil />
               </Link>
             </Button>}
+            {canResetPassword && data.user && <Button variant="secondary" aria-label="Đặt lại mật khẩu" title="Đặt lại mật khẩu" onClick={() => setResetPasswordOpen(true)}><KeyRound /></Button>}
+            {canManageFace && faceStatus?.enrolled && <Button variant="danger" aria-label="Xóa khuôn mặt chấm công" title="Xóa khuôn mặt chấm công" onClick={() => setDeleteFaceOpen(true)}><ScanFace /></Button>}
             {canUpdate && <Button onClick={() => setEmploymentUpdateOpen(true)}><Clock3 /></Button>}
             {canPermanentlyDelete && (
               <Button variant="danger" onClick={() => setPermanentDeleteOpen(true)} disabled={del.isPending}><Trash2 /></Button>
@@ -186,6 +199,32 @@ export default function EmployeeDetailPage() {
         </TabsContent>
         </Tabs></div>
       </section>
+
+      <Dialog open={deleteFaceOpen} onOpenChange={setDeleteFaceOpen}>
+        <DialogContent className="p-6">
+          <DialogTitle>Xóa khuôn mặt chấm công</DialogTitle>
+          <DialogDescription className="mt-1 text-sm text-ink-muted">Xóa mẫu khuôn mặt của {data.fullName}. Nhân viên sẽ được mời đăng ký khuôn mặt mới ở lần mở trang chấm công tiếp theo.</DialogDescription>
+          <div className="mt-5 flex justify-end gap-2"><DialogClose asChild><Button type="button" variant="secondary">Hủy</Button></DialogClose><Button variant="danger" disabled={purgeFace.isPending} onClick={() => purgeFace.mutate(undefined, { onSuccess: () => setDeleteFaceOpen(false) })}>{purgeFace.isPending ? 'Đang xóa…' : 'Xóa khuôn mặt'}</Button></div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={resetPasswordOpen} onOpenChange={setResetPasswordOpen}>
+        <DialogContent className="p-6">
+          <DialogTitle>Đặt lại mật khẩu nhân viên</DialogTitle>
+          <DialogDescription className="mt-1 text-sm text-ink-muted">Mật khẩu mới là mật khẩu tạm. Nhân viên sẽ được yêu cầu đổi sau khi đăng nhập.</DialogDescription>
+          <form className="mt-5 space-y-4" onSubmit={(event) => {
+            event.preventDefault();
+            if (!data.user) return;
+            resetPassword.mutate({ password: temporaryPassword, currentPassword: resetActorPassword }, {
+              onSuccess: () => { setResetPasswordOpen(false); setResetActorPassword(''); setTemporaryPassword(''); },
+            });
+          }}>
+            <div><Label>Mật khẩu admin hiện tại</Label><Input type="password" autoComplete="current-password" value={resetActorPassword} onChange={(event) => setResetActorPassword(event.target.value)} required /></div>
+            <div><Label>Mật khẩu tạm mới</Label><Input type="password" autoComplete="new-password" minLength={8} value={temporaryPassword} onChange={(event) => setTemporaryPassword(event.target.value)} required /></div>
+            <div className="flex justify-end gap-2"><DialogClose asChild><Button type="button" variant="secondary">Hủy</Button></DialogClose><Button type="submit" disabled={resetPassword.isPending}>{resetPassword.isPending ? 'Đang đặt lại…' : 'Đặt lại mật khẩu'}</Button></div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={permanentDeleteOpen} onOpenChange={setPermanentDeleteOpen}>
         <DialogContent className="p-6">

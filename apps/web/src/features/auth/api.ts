@@ -24,7 +24,10 @@ export function useLogin() {
       const { data } = await api.post<LoginResponse>('/auth/login', creds);
       return { ...data, rememberMe };
     },
-    onSuccess: ({ rememberMe, ...data }) => setAuth(data, rememberMe),
+    onSuccess: ({ rememberMe, ...data }) => {
+      if (typeof window !== 'undefined') sessionStorage.removeItem(`password-change-dismissed:${data.user.id}`);
+      setAuth(data, rememberMe);
+    },
   });
 }
 

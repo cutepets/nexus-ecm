@@ -1,8 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Put } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { RbacService } from './rbac.service';
-import { AssignRoleDto, CreateRoleDto, SetRolePermissionsDto, UpdateRoleDto } from './dto/rbac.dto';
+import { AssignRoleDto, CreateRoleDto, SetRolePermissionsDto, UpdateRoleDto, UpdateRoleAssignmentRulesDto } from './dto/rbac.dto';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
+import { CurrentUser, RequestUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('rbac')
 @ApiBearerAuth()
@@ -24,6 +25,20 @@ export class RbacController {
     return this.rbac.listPermissions();
   }
 
+  @Get('role-assignment-rules')
+  @RequirePermissions('rbac:read')
+  @ApiOperation({ summary: 'List automatic role assignment rules' })
+  listAssignmentRules() {
+    return this.rbac.listAssignmentRules();
+  }
+
+  @Put('role-assignment-rules')
+  @RequirePermissions('rbac:update')
+  @ApiOperation({ summary: 'Replace automatic role assignment rules and sync employee roles' })
+  replaceAssignmentRules(@Body() dto: UpdateRoleAssignmentRulesDto, @CurrentUser() user: RequestUser) {
+    return this.rbac.replaceAssignmentRules(dto.rules, user.id);
+  }
+
   @Post('roles')
   @RequirePermissions('rbac:create')
   @ApiOperation({ summary: 'Create a custom role' })
@@ -33,7 +48,7 @@ export class RbacController {
 
   @Put('roles/:id/permissions')
   @RequirePermissions('rbac:update')
-  @ApiOperation({ summary: 'Replace the permission set of a role, including system roles' })
+  @ApiOperation({ summary: 'Replace the permission set of a role; ADMIN always retains all permissions' })
   setPermissions(@Param('id') id: string, @Body() dto: SetRolePermissionsDto) {
     return this.rbac.setRolePermissions(id, dto.permissionKeys);
   }
@@ -47,7 +62,7 @@ export class RbacController {
 
   @Delete('roles/:id')
   @RequirePermissions('rbac:delete')
-  @ApiOperation({ summary: 'Delete an unused custom role' })
+  @ApiOperation({ summary: 'Delete any role except ADMIN; current assignments are removed with the role' })
   deleteRole(@Param('id') id: string) {
     return this.rbac.deleteRole(id);
   }

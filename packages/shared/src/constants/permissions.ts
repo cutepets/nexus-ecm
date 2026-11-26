@@ -13,6 +13,12 @@ export const PERMISSION_MODULES = [
   'report',
   'rbac',
   'user',
+  'settings',
+  'attendance-policy',
+  'branch',
+  'attendance-correction',
+  'payroll',
+  'integration',
 ] as const;
 
 export type PermissionModule = (typeof PERMISSION_MODULES)[number];

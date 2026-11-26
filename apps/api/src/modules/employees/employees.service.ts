@@ -8,6 +8,7 @@ import { CreateEmployeeDto, UpdateEmployeeDto, EmployeeQueryDto, TerminateEmploy
 import { CreateJobHistoryDto, CreateSalaryHistoryDto } from './dto/history.dto';
 import { CreateDocumentDto, PresignCreateEmployeeUploadDto, PresignUploadDto } from './dto/document.dto';
 import { normalizeVietnamesePhone } from '../../common/utils/login-identifier';
+import { RoleAssignmentService } from '../rbac/role-assignment.service';
 
 const LIST_SELECT = {
   id: true,
@@ -52,6 +53,7 @@ export class EmployeesService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly audit: AuditService,
+    private readonly roleAssignments: RoleAssignmentService,
   ) {}
 
   async list(query: EmployeeQueryDto, includeCompensation = false) {
@@ -213,6 +215,12 @@ export class EmployeesService {
         select: LIST_SELECT,
       });
       await this.reconcileAssignments(tx, employee.id, dto.branchIds, dto.workScheduleId, new Date(dto.joinDate));
+      await this.roleAssignments.syncEmployee(tx, {
+        userId,
+        departmentId: dto.departmentId ?? null,
+        positionId: dto.positionId ?? null,
+        branchIds: [...new Set([dto.primaryBranchId, ...(dto.branchIds ?? [])])],
+      });
       const initialValues: Record<string, unknown> = {
         basicSalary: dto.basicSalary?.toString() ?? null,
         spaBonusPercent: dto.spaBonusPercent?.toString() ?? null,
@@ -280,7 +288,10 @@ export class EmployeesService {
           if (dto.phone && !normalizedPhone) throw new BadRequestException('Số điện thoại đăng nhập phải là số Việt Nam hợp lệ');
           userData.phone = normalizedPhone;
         }
-        if (password !== undefined) userData.passwordHash = await argon2.hash(password, { type: argon2.argon2id });
+        if (password !== undefined) {
+          userData.passwordHash = await argon2.hash(password, { type: argon2.argon2id });
+          userData.mustChangePassword = true;
+        }
         await tx.user.update({ where: { id: before.userId }, data: userData });
         await tx.refreshToken.updateMany({
           where: { userId: before.userId, revokedAt: null },
@@ -300,6 +311,14 @@ export class EmployeesService {
       await this.assertPrimaryBranch(tx, dto.primaryBranchId);
       const changeDate = this.dateOnly(effectiveDate ? new Date(effectiveDate) : new Date());
       await this.reconcileAssignments(tx, id, branchIds, workScheduleId, changeDate);
+      if (before.userId) {
+        await this.roleAssignments.syncEmployee(tx, {
+          userId: before.userId,
+          departmentId: employeeData.departmentId !== undefined ? employeeData.departmentId : before.departmentId,
+          positionId: employeeData.positionId !== undefined ? employeeData.positionId : before.positionId,
+          branchIds: [...new Set([employeeData.primaryBranchId ?? before.primaryBranchId, ...(branchIds ?? previousBranches.map((item) => item.branchId))].filter((branchId): branchId is string => Boolean(branchId)))],
+        });
+      }
 
       const trackedValues: Record<string, { before: unknown; after: unknown }> = {
         basicSalary: { before: before.basicSalary === null ? null : Number(before.basicSalary).toFixed(2), after: employeeData.basicSalary !== undefined ? (employeeData.basicSalary === null ? null : Number(employeeData.basicSalary).toFixed(2)) : before.basicSalary === null ? null : Number(before.basicSalary).toFixed(2) },
@@ -756,7 +775,6 @@ export class EmployeesService {
     if (phoneTaken) throw new BadRequestException('Số điện thoại đã được sử dụng bởi tài khoản khác');
 
     const role = await db.role.findUnique({ where: { name: 'EMPLOYEE' } });
-    if (!role) throw new BadRequestException('Default EMPLOYEE role is missing');
     const user = await db.user.create({
       data: {
         username: normalizedUsername,
@@ -766,7 +784,7 @@ export class EmployeesService {
         mustChangePassword: password === '123456',
         fullName,
         isActive: true,
-        roles: { create: { roleId: role.id } },
+        roles: role ? { create: { roleId: role.id } } : undefined,
       },
     });
     return user.id;

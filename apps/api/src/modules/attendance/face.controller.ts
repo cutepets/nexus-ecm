@@ -23,11 +23,15 @@ export class FaceController {
   constructor(private readonly face: FaceService) {}
 
   @Post("enroll")
-  @RequirePermissions("attendance:face:enroll")
   @ApiOperation({
     summary: "Enroll face embeddings for an employee (with dedup)",
   })
   enroll(@Body() dto: EnrollFaceDto, @CurrentUser() user: RequestUser) {
+    const isSelf = user.employeeId === dto.employeeId;
+    const mayManage = user.roles.includes("ADMIN") || user.permissions.includes("attendance:face:enroll");
+    if (!isSelf && !mayManage) {
+      throw new ForbiddenException("Only the employee or a face manager may enroll this face");
+    }
     return this.face.enroll(dto, { actorId: user.id });
   }
 
@@ -59,6 +63,9 @@ export class FaceController {
     @Param("employeeId") employeeId: string,
     @CurrentUser() user: RequestUser,
   ) {
+    if (user.employeeId === employeeId) {
+      throw new ForbiddenException("Employees cannot delete their own enrolled face");
+    }
     return this.face.purge(employeeId, { actorId: user.id });
   }
 

@@ -85,6 +85,19 @@ export function useUpdateEmployee(id: string) {
   });
 }
 
+export function useResetEmployeePassword(employeeId: string, userId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { password: string; currentPassword: string }) =>
+      (await api.post(`/users/${userId}/reset-password`, payload)).data,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.detail(employeeId) });
+      toast.success('Đã đặt lại mật khẩu. Nhân viên sẽ đổi mật khẩu khi đăng nhập.');
+    },
+    onError: (e) => toast.error(errMsg(e, 'Không thể đặt lại mật khẩu')),
+  });
+}
+
 /** Upload the two identity-card images before the employee record is created. */
 export async function uploadNewEmployeeIdentityCards(files: { front?: File; back?: File }) {
   const upload = async (file: File, kind: 'identity-front' | 'identity-back') => {

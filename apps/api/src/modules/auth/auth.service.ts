@@ -150,6 +150,7 @@ export class AuthService {
       roles: user.roles,
       permissions: user.permissions,
       employeeId: user.employeeId,
+      mustChangePassword: user.mustChangePassword,
     };
   }
 

@@ -66,6 +66,7 @@ model Role {
 
   users       UserRole[]
   permissions RolePermission[]
+  assignmentRules RoleAssignmentRule[]
 
   @@map("roles")
 }
@@ -85,11 +86,29 @@ model Permission {
 model UserRole {
   userId String
   roleId String
+  isAutomatic Boolean @default(false)
   user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
   role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@id([userId, roleId])
   @@map("user_roles")
+}
+
+model RoleAssignmentRule {
+  id           String   @id @default(cuid())
+  name         String
+  departmentId String?
+  positionId   String?
+  branchId     String?
+  roleId       String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  role         Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@index([roleId])
+  @@index([departmentId, positionId, branchId, isActive])
+  @@map("role_assignment_rules")
 }
 
 model RolePermission {

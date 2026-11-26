@@ -64,12 +64,15 @@ const ROLE_PERMISSIONS: Record<string, (key: string) => boolean> = {
     k.startsWith("document:") ||
     k.startsWith("dashboard:") ||
     k === "report:export" ||
+    k === "user:reset-password" ||
     k === "notification:read",
   MANAGER: (k) =>
     k.startsWith("project:") ||
     k.startsWith("task:") ||
     k === "leave:approve" ||
     k === "attendance:review" ||
+    k === "attendance:face:enroll" ||
+    k === "user:reset-password" ||
     k.startsWith("dashboard:") ||
     k.endsWith(":read") ||
     k.startsWith("chat:") ||
@@ -95,6 +98,11 @@ async function main() {
   await prisma.permission.createMany({
     data: permissionDefs.map((p) => ({ key: p.key, module: p.module })),
     skipDuplicates: true,
+  });
+  // Keep the persisted catalog aligned with the current module/action map.
+  // Deleting obsolete permissions also removes their role links by cascade.
+  await prisma.permission.deleteMany({
+    where: { key: { notIn: permissionDefs.map((permission) => permission.key) } },
   });
   const permissions = await prisma.permission.findMany();
   console.log(`  ✓ ${permissions.length} permissions`);

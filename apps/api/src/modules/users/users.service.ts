@@ -34,6 +34,7 @@ export interface ResolvedUser {
   avatarCropUrl?: string | null;
   passwordHash: string;
   isActive: boolean;
+  mustChangePassword: boolean;
   roles: string[];
   permissions: string[];
   employeeId: string | null;
@@ -241,6 +242,7 @@ export class UsersService {
         fullName,
         phone,
         passwordHash: await argon2.hash(dto.password, { type: argon2.argon2id }),
+        mustChangePassword: dto.password === '123456',
         roles: { create: roles.map((role) => ({ roleId: role.id })) },
       },
       include: ACCOUNT_INCLUDE,
@@ -273,7 +275,7 @@ export class UsersService {
     const before = await this.requireAccount(id);
     await this.prisma.user.update({
       where: { id },
-      data: { passwordHash: await argon2.hash(password, { type: argon2.argon2id }), mustChangePassword: false },
+      data: { passwordHash: await argon2.hash(password, { type: argon2.argon2id }), mustChangePassword: true },
     });
     const revoked = await this.revokeActiveSessions(id);
     await this.audit.record({ action: 'UPDATE', entity: 'User', entityId: id, before: this.auditSnapshot(before), after: { passwordReset: true, sessionsRevoked: revoked }, ctx });
@@ -345,6 +347,7 @@ export class UsersService {
       avatarCropUrl: user.avatarCropUrl,
       passwordHash: user.passwordHash,
       isActive: user.isActive,
+      mustChangePassword: user.mustChangePassword,
       roles,
       permissions,
       employeeId: user.employee?.id ?? null,

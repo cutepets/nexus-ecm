@@ -15,7 +15,7 @@ function createService(attendanceCount = 0) {
   for (const delegate of historyDelegates) {
     prisma[delegate] = { count: jest.fn().mockResolvedValue(delegate === 'attendance' ? attendanceCount : 0) };
   }
-  return new EmployeesService(prisma as unknown as PrismaService, {} as never, { record: jest.fn() } as never);
+  return new EmployeesService(prisma as unknown as PrismaService, {} as never, { record: jest.fn() } as never, {} as never);
 }
 
 describe('EmployeesService.getDeletionEligibility', () => {

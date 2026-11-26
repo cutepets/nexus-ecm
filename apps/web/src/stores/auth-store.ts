@@ -54,6 +54,7 @@ interface AuthState {
     rememberMe?: boolean,
   ) => void;
   setTokens: (tokens: { accessToken: string; refreshToken: string }) => void;
+  setMustChangePassword: (required: boolean) => void;
   clear: () => void;
   hasPermission: (permission: string) => boolean;
 }
@@ -71,6 +72,9 @@ export const useAuthStore = create<AuthState>()(
         set({ accessToken, refreshToken });
         getAuthChannel()?.postMessage({ type: 'tokens', accessToken, refreshToken } satisfies AuthSyncMessage);
       },
+      setMustChangePassword: (required) => set((state) => ({
+        user: state.user ? { ...state.user, mustChangePassword: required } : null,
+      })),
       clear: () => {
         set({ user: null, accessToken: null, refreshToken: null, rememberMe: false });
         getAuthChannel()?.postMessage({ type: 'clear' } satisfies AuthSyncMessage);

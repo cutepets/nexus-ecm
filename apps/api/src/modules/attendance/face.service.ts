@@ -88,12 +88,16 @@ export class FaceService {
     });
     if (!employee) throw new NotFoundException("Không tìm thấy nhân viên");
 
-    // Re-enrolment is a replacement, not an append. Keeping old templates
-    // leaves stale face vectors in the matching pool.
+    // A registered face can only be replaced after a manager explicitly
+    // purges it. This prevents self-service enrollment from silently changing
+    // an employee's biometric identity.
     const existingProfiles = await this.prisma.faceProfile.findMany({
       where: { employeeId: dto.employeeId },
       select: { sampleImageUrl: true },
     });
+    if (existingProfiles.length) {
+      throw new ConflictException('Employee already has an enrolled face; a manager must delete it before re-enrollment');
+    }
 
     // Deduplicate: reject if any embedding closely matches a DIFFERENT employee.
     const others = await this.prisma.faceProfile.findMany({
@@ -122,7 +126,6 @@ export class FaceService {
     }
 
     const created = await this.prisma.$transaction(async (tx) => {
-      await tx.faceProfile.deleteMany({ where: { employeeId: dto.employeeId } });
       return Promise.all(
         dto.embeddings.map((emb, i) =>
           tx.faceProfile.create({

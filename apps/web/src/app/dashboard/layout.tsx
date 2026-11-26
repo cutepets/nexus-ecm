@@ -10,6 +10,7 @@ import { Topbar } from '@/components/shell/topbar';
 import { CommandPalette } from '@/components/shell/command-palette';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api-client';
+import { PasswordOnboardingDialog } from '@/features/auth/password-onboarding-dialog';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -94,6 +95,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-screen">
       <Sidebar />
       <CommandPalette />
+      <PasswordOnboardingDialog />
       <div className="flex-1 md:ml-60">
         <Topbar />
         <main className="w-full p-6">{children}</main>
