@@ -7,10 +7,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
+import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { useAuthStore } from "@/stores/auth-store";
 import { useEmployees } from "@/features/employees/api";
 import { useBranches, useWorkSchedules } from "@/features/settings/api";
 import { useApplyWorkScheduleRange, useBulkDeleteWorkRoster, useCopyWorkRosterDay, useGenerateWorkRoster, useUpdateDailySchedule, useWorkRoster, type RosterEntry } from "@/features/attendance/work-roster-api";
+import { employeeDateMarker } from "@/features/employees/employee-date-marker";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const monthKey = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}`;
@@ -32,6 +34,7 @@ export default function KalenderPage() {
   const [cursor, setCursor] = useState(() => new Date());
   const [branchId, setBranchId] = useState<string>();
   const [selectedDate, setSelectedDate] = useState<string>();
+  const [deletingEntry, setDeletingEntry] = useState<RosterEntry | null>(null);
   const [editing, setEditing] = useState<RosterEntry>();
   const [copyingDate, setCopyingDate] = useState<string>();
   const [addingShiftDate, setAddingShiftDate] = useState<string>();
@@ -72,6 +75,8 @@ export default function KalenderPage() {
   const leading = (new Date(year, monthIndex, 1).getDay() + 6) % 7;
   const cells = [...Array(leading).fill(null), ...Array.from({ length: days }, (_, index) => index + 1)];
   const selectedEntries = selectedDate ? byDate.get(selectedDate) ?? [] : [];
+  const partTimeEntries = selectedEntries.filter((entry) => entry.employee.employmentType === "PART_TIME");
+  const fullTimeEntries = selectedEntries.filter((entry) => entry.employee.employmentType === "FULL_TIME");
   const toggleCalendarDate = (key: string) => {
     if (!selectingDays && !copySource) {
       setSelectedDate(key);
@@ -114,6 +119,34 @@ export default function KalenderPage() {
     setSelectedDate(undefined);
     window.setTimeout(() => setAddingShiftDate(workDate), 0);
   };
+  const removeSelectedEntry = () => {
+    if (!deletingEntry) return;
+    const branchId = deletingEntry.segments[0]?.branch.id;
+    if (!branchId) return;
+    bulkDelete.mutate({
+      workDates: [deletingEntry.workDate.slice(0, 10)],
+      branchId,
+      employeeId: deletingEntry.employee.id,
+    }, { onSuccess: () => setDeletingEntry(null) });
+  };
+  const renderShiftEntry = (entry: RosterEntry) => (
+    <div key={entry.id} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border p-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <Avatar className="size-12 border border-border">
+          <AvatarImage src={entry.employee.avatarUrl ?? entry.employee.photoUrl ?? undefined} alt={entry.employee.fullName} />
+          <AvatarFallback className="text-xs font-semibold">{initials(entry.employee.fullName)}</AvatarFallback>
+        </Avatar>
+        <div className="min-w-0">
+          <div className="truncate font-medium">{entry.employee.fullName}</div>
+          <div className="truncate text-xs text-ink-muted">{entry.scheduleName} · {entry.segments.map((segment) => `${segment.startTime}–${segment.endTime} (${segment.branch.name})`).join(" · ")}</div>
+        </div>
+      </div>
+      {canManage && <div className="flex shrink-0 items-center gap-1">
+        <Button size="sm" variant="secondary" onClick={() => { setEditing(entry); setSelectedDate(undefined); }}>Sửa</Button>
+        <Button type="button" size="icon" variant="ghost" className="text-rose-600 hover:bg-rose-50 hover:text-rose-700" aria-label={`Loại bỏ ca của ${entry.employee.fullName}`} title="Loại bỏ ca" onClick={() => setDeletingEntry(entry)}><X /></Button>
+      </div>}
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -132,10 +165,39 @@ export default function KalenderPage() {
         </div>
         <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-ink-subtle">{["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((day) => <div key={day} className="py-1">{day}</div>)}</div>
         {canManage && (selectingDays || copySource) && <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-canvas p-3 text-sm"><span className="mr-auto">{copySource ? `Ngày nguồn: ${copySource} · Chọn ngày đích (${selectedDays.length})` : `Đã chọn ${selectedDays.length} ngày`}</span>{copySource ? <><Button size="sm" disabled={!selectedDays.length || copyDay.isPending} onClick={applyCopy}>Sao chép vào ngày đã chọn</Button><Button size="sm" variant="secondary" onClick={clearDaySelection}>Hủy</Button></> : <><Button size="sm" variant="secondary" onClick={selectAllDays}>Chọn Tất cả</Button>{selectedDays.length === 1 && <Button size="sm" variant="secondary" onClick={startCopy}>Sao chép lịch ngày này</Button>}{selectedDays.length > 0 && <Button size="sm" variant="secondary" disabled={bulkDelete.isPending} onClick={deleteSelectedShifts}>Xóa</Button>}<Button size="sm" variant="secondary" onClick={clearDaySelection}>Bỏ chọn</Button></>}</div>}
-        <div className="mt-1 grid grid-cols-7 gap-1">{cells.map((day, index) => { if (!day) return <div key={`blank-${index}`} className="min-h-32 rounded-lg bg-canvas/40" />; const key = dateKey(year, monthIndex, day); const dayEntries = byDate.get(key) ?? []; const isSelected = selectedDays.includes(key); const isCopySource = copySource === key; const isToday = key === todayKey; return <button type="button" key={key} aria-current={isToday ? "date" : undefined} aria-pressed={isSelected || isCopySource} onClick={() => toggleCalendarDate(key)} className={`min-h-32 rounded-lg border p-2 text-left align-top hover:border-accent-purple/60 ${isSelected || isCopySource ? "border-ink bg-accent-purple/10 ring-2 ring-ink/20" : isToday ? "border-amber-500 bg-amber-50 ring-2 ring-amber-200" : "border-border bg-card"}`}><div className="mb-2 flex items-center justify-between gap-1 text-xs font-medium text-ink-subtle"><span className={isToday ? "inline-flex size-6 items-center justify-center rounded-full bg-amber-500 font-semibold text-white" : ""}>{day}</span>{isSelected && <span className="rounded-full bg-ink px-1.5 py-0.5 text-white">✓</span>}{isCopySource && <span className="rounded-full bg-accent-purple/20 px-1.5 py-0.5 text-purple-900">Nguồn</span>}</div><div className="flex flex-wrap gap-1.5">{dayEntries.slice(0, 10).map((entry) => <Avatar key={entry.id} title={`${entry.employee.fullName} · ${entry.scheduleName}`} className="size-10 border-2 border-white bg-card shadow-sm"><AvatarImage src={entry.employee.avatarUrl ?? entry.employee.photoUrl ?? undefined} alt={entry.employee.fullName} /><AvatarFallback className="text-[10px] font-semibold">{initials(entry.employee.fullName)}</AvatarFallback></Avatar>)}{dayEntries.length > 10 && <span className="inline-flex size-10 items-center justify-center rounded-full bg-canvas text-[10px]">+{dayEntries.length - 10}</span>}</div></button>; })}</div>
+        <div className="mt-1 grid grid-cols-7 gap-1">{cells.map((day, index) => { if (!day) return <div key={`blank-${index}`} className="min-h-32 rounded-lg bg-canvas/40" />; const key = dateKey(year, monthIndex, day); const dayEntries = byDate.get(key) ?? []; const isSelected = selectedDays.includes(key); const isCopySource = copySource === key; const isToday = key === todayKey; return <button type="button" key={key} aria-current={isToday ? "date" : undefined} aria-pressed={isSelected || isCopySource} onClick={() => toggleCalendarDate(key)} className={`min-h-32 rounded-lg border p-2 text-left align-top hover:border-accent-purple/60 ${isSelected || isCopySource ? "border-ink bg-accent-purple/10 ring-2 ring-ink/20" : isToday ? "border-amber-500 bg-amber-50 ring-2 ring-amber-200" : "border-border bg-card"}`}><div className="mb-2 flex items-center justify-between gap-1 text-xs font-medium text-ink-subtle"><span className={isToday ? "inline-flex size-6 items-center justify-center rounded-full bg-amber-500 font-semibold text-white" : ""}>{day}</span>{isSelected && <span className="rounded-full bg-ink px-1.5 py-0.5 text-white">✓</span>}{isCopySource && <span className="rounded-full bg-accent-purple/20 px-1.5 py-0.5 text-purple-900">Nguồn</span>}</div><div className="flex flex-wrap gap-1.5">{dayEntries.slice(0, 10).map((entry) => { const marker = employeeDateMarker(entry.employee.joinDate, entry.employee.exitDate); return <span key={entry.id} className="relative inline-flex shrink-0" title={`${entry.employee.fullName} · ${entry.scheduleName}`}><Avatar className="size-10 border-2 border-white bg-card shadow-sm"><AvatarImage src={entry.employee.avatarUrl ?? entry.employee.photoUrl ?? undefined} alt={entry.employee.fullName} /><AvatarFallback className="text-[10px] font-semibold">{initials(entry.employee.fullName)}</AvatarFallback></Avatar>{marker && <span className={`absolute -right-1 -top-1 z-10 inline-flex size-4 items-center justify-center rounded-full text-[9px] font-bold ${marker.tone === "rose" ? "bg-rose-200 text-rose-800" : "bg-amber-100 text-amber-900"}`} title={marker.title}>{marker.value}</span>}</span>; })}{dayEntries.length > 10 && <span className="inline-flex size-10 items-center justify-center rounded-full bg-canvas text-[10px]">+{dayEntries.length - 10}</span>}</div></button>; })}</div>
         {isLoading && <p className="mt-3 text-sm text-ink-muted">Đang tải lịch…</p>}
       </section>
-      <Dialog open={Boolean(selectedDate)} onOpenChange={(open) => !open && setSelectedDate(undefined)}><DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto p-6"><DialogTitle>Nhân viên ngày {selectedDate}</DialogTitle><DialogDescription>Danh sách ca tại cửa hàng đang chọn.</DialogDescription>{canManage && <div className="mt-4 flex flex-wrap justify-end gap-2"><Button size="sm" variant="secondary" disabled={!selectedEntries.length} onClick={openCopyDialog}><Copy />Copy ngày</Button><Button size="sm" onClick={openAddShiftDialog}><Plus />Thêm ca</Button></div>}<div className="mt-4 space-y-2">{selectedEntries.map((entry) => <div key={entry.id} className="flex flex-col items-stretch justify-between gap-3 rounded-xl border border-border p-3 sm:flex-row sm:items-center"><div className="flex min-w-0 items-center gap-3"><Avatar className="size-12 border border-border"><AvatarImage src={entry.employee.avatarUrl ?? entry.employee.photoUrl ?? undefined} alt={entry.employee.fullName} /><AvatarFallback className="text-xs font-semibold">{initials(entry.employee.fullName)}</AvatarFallback></Avatar><div className="min-w-0"><div className="font-medium">{entry.employee.fullName}</div><div className="text-xs text-ink-muted">{entry.scheduleName} · {entry.segments.map((segment) => `${segment.startTime}–${segment.endTime} (${segment.branch.name})`).join(" · ")}</div></div></div>{canManage && <Button className="self-end sm:self-auto" size="sm" variant="secondary" onClick={() => { setEditing(entry); setSelectedDate(undefined); }}>Sửa</Button>}</div>)}{!selectedEntries.length && <p className="rounded-xl bg-canvas p-4 text-sm text-ink-muted">Không có nhân viên được xếp tại cửa hàng này. Chọn “Thêm ca” để bắt đầu xếp lịch.</p>}</div></DialogContent></Dialog>
+      <Dialog open={Boolean(selectedDate)} onOpenChange={(open) => !open && setSelectedDate(undefined)}>
+        <DialogContent className="max-h-[85vh] max-w-5xl overflow-y-auto p-6">
+          <DialogTitle>Nhân viên ngày {selectedDate}</DialogTitle>
+          <DialogDescription>Danh sách ca tại cửa hàng đang chọn.</DialogDescription>
+          {canManage && <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <Button size="sm" variant="secondary" disabled={!selectedEntries.length} onClick={openCopyDialog}><Copy />Copy ngày</Button>
+            <Button size="sm" onClick={openAddShiftDialog}><Plus />Thêm ca</Button>
+          </div>}
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <section className="min-w-0 space-y-2">
+              <h3 className="text-sm font-semibold text-ink">Part Time</h3>
+              {partTimeEntries.map(renderShiftEntry)}
+              {!partTimeEntries.length && <p className="rounded-xl bg-canvas p-4 text-sm text-ink-muted">Không có nhân viên Part Time.</p>}
+            </section>
+            <section className="min-w-0 space-y-2">
+              <h3 className="text-sm font-semibold text-ink">Full Time</h3>
+              {fullTimeEntries.map(renderShiftEntry)}
+              {!fullTimeEntries.length && <p className="rounded-xl bg-canvas p-4 text-sm text-ink-muted">Không có nhân viên Full Time.</p>}
+            </section>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <ConfirmDeleteDialog
+        open={Boolean(deletingEntry)}
+        title="Xác nhận loại bỏ ca"
+        description={`Loại bỏ ca “${deletingEntry?.scheduleName ?? ""}” của ${deletingEntry?.employee.fullName ?? "nhân viên"} ngày ${deletingEntry?.workDate.slice(0, 10) ?? ""}?`}
+        pending={bulkDelete.isPending}
+        onOpenChange={(open) => !open && setDeletingEntry(null)}
+        onConfirm={removeSelectedEntry}
+      />
       <Dialog open={Boolean(copyingDate)} onOpenChange={(open) => !open && setCopyingDate(undefined)}>{copyingDate && activeBranch && <CopyDayDialog sourceDate={copyingDate} pending={copyDay.isPending} onSave={(targetDates) => copyDay.mutate({ sourceDate: copyingDate, targetDates, branchId: activeBranch }, { onSuccess: () => setCopyingDate(undefined) })} onClose={() => setCopyingDate(undefined)} />}</Dialog>
       <Dialog open={Boolean(addingShiftDate)} onOpenChange={(open) => !open && setAddingShiftDate(undefined)}>{addingShiftDate && <AddShiftDialog workDate={addingShiftDate} schedules={schedules ?? []} branches={branches} preferredBranchId={activeBranch} pending={updateDay.isPending} onSave={(payload) => updateDay.mutate(payload, { onSuccess: () => setAddingShiftDate(undefined) })} onClose={() => setAddingShiftDate(undefined)} />}</Dialog>
       <Dialog open={Boolean(editing)} onOpenChange={(open) => !open && setEditing(undefined)}>{editing && <EditDayDialog entry={editing} schedules={schedules ?? []} branches={branches} employees={employees?.items ?? []} pending={updateDay.isPending} onSave={(payload) => updateDay.mutate(payload, { onSuccess: () => setEditing(undefined) })} onClose={() => setEditing(undefined)} />}</Dialog>

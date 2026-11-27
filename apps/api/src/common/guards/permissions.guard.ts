@@ -24,6 +24,17 @@ export class PermissionsGuard implements CanActivate {
     if (!has) {
       throw new ForbiddenException(`Missing permission: ${required.join(', ')}`);
     }
+
+    // Write endpoints currently use object-level checks in their services only
+    // for the scopes they explicitly implement. Keep scoped write grants from
+    // silently becoming global writes until those endpoints validate targets.
+    const unscopedWrite = required.find((permission) =>
+      /:(create|update|delete|export)$/.test(permission) &&
+      (user.permissionScopes?.[permission] ?? 'ALL') !== 'ALL',
+    );
+    if (unscopedWrite) {
+      throw new ForbiddenException(`This action requires the All scope: ${unscopedWrite}`);
+    }
     return true;
   }
 }

@@ -48,7 +48,15 @@ export interface AttendanceRecord {
   approvalEvidencePhotos?: string[];
   approvalReviewNote?: string | null;
   manualWorkScheduleName?: string | null;
+  manualScheduleTimes?: {
+    startTime: string;
+    endTime: string;
+    secondStartTime: string;
+    secondEndTime: string;
+  } | null;
   workScheduleName?: string | null;
+  workScheduleTimes?: string[];
+  isScheduledPlaceholder?: boolean;
   totalMinutes?: number;
   lateMinutes?: number | null;
   latePenalty?: number | null;
@@ -153,7 +161,7 @@ interface CheckPayload {
   borrowedAttendanceConfirmed?: boolean;
   embedding: number[];
   livenessPassed: boolean;
-  livenessChallenge?: "NONE" | "BLINK" | "TURN_LEFT" | "TURN_RIGHT" | "SMILE";
+  livenessChallenge?: "NONE" | "BLINK" | "TURN_LEFT" | "TURN_RIGHT" | "SMILE" | "NOD";
   livenessToken?: string;
   lat?: number;
   lng?: number;
@@ -168,7 +176,7 @@ const keys = {
   faceStatus: (id: string) => ["attendance", "face-status", id] as const,
 };
 
-export function useAttendanceList(date?: string) {
+export function useAttendanceList(date?: string, enabled = true) {
   return useQuery({
     queryKey: keys.list(date),
     queryFn: async () => {
@@ -177,6 +185,7 @@ export function useAttendanceList(date?: string) {
       });
       return data;
     },
+    enabled,
   });
 }
 
@@ -271,7 +280,7 @@ export function useEligibleLocations(employeeId: string) {
 
 export interface AttendanceCheckPolicy {
   requireGps: boolean;
-  livenessMode: "NONE" | "BLINK" | "TURN_HEAD" | "SMILE" | "RANDOM";
+  livenessMode: "NONE" | "BLINK" | "TURN_HEAD" | "SMILE" | "NOD" | "RANDOM";
 }
 
 export function useAttendanceCheckPolicy() {
@@ -283,7 +292,7 @@ export function useAttendanceCheckPolicy() {
 }
 
 export interface AttendanceLivenessChallenge {
-  challenge: "BLINK" | "TURN_LEFT" | "TURN_RIGHT" | "SMILE";
+  challenge: "BLINK" | "TURN_LEFT" | "TURN_RIGHT" | "SMILE" | "NOD";
   token: string;
   expiresAt: string;
 }
@@ -483,6 +492,12 @@ export function useUpdateAttendanceAdjustment() {
     }: {
       id: string;
       workScheduleId?: string;
+      manualScheduleTimes?: {
+        startTime: string;
+        endTime: string;
+        secondStartTime: string;
+        secondEndTime: string;
+      };
       latePenalty?: number;
       reward?: number;
     }) =>

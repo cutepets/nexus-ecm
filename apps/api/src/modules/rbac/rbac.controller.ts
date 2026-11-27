@@ -50,7 +50,7 @@ export class RbacController {
   @RequirePermissions('rbac:update')
   @ApiOperation({ summary: 'Replace the permission set of a role; ADMIN always retains all permissions' })
   setPermissions(@Param('id') id: string, @Body() dto: SetRolePermissionsDto) {
-    return this.rbac.setRolePermissions(id, dto.permissionKeys);
+    return this.rbac.setRolePermissions(id, dto.permissions);
   }
 
   @Patch('roles/:id')

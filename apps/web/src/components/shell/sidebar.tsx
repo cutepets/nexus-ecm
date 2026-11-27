@@ -55,12 +55,16 @@ export function Sidebar() {
               href={item.href}
               className={cn(
                 "flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors",
+                item.separatorBefore && "mt-3 border-t border-border pt-4",
                 active
-                  ? "bg-canvas font-medium text-ink"
+                  ? item.href === "/dashboard/absensi"
+                    ? "bg-accent-purple/15 font-semibold text-purple-900 ring-1 ring-accent-purple/30"
+                    : "bg-canvas font-medium text-ink"
                   : "text-ink-muted hover:bg-canvas hover:text-ink",
+                item.href === "/dashboard/absensi" && !active && "bg-accent-purple/5 font-medium text-purple-800 hover:bg-accent-purple/10",
               )}
             >
-              <item.icon className="size-4 shrink-0" />
+              <item.icon className={cn("size-4 shrink-0", item.href === "/dashboard/absensi" && "size-[18px]")} />
               {item.label}
             </Link>
           );

@@ -5,7 +5,6 @@ export interface EmployeeRoleFacts {
   userId: string;
   departmentId: string | null;
   positionId: string | null;
-  branchIds: string[];
 }
 
 @Injectable()
@@ -14,8 +13,7 @@ export class RoleAssignmentService {
     const rules = await tx.roleAssignmentRule.findMany({ where: { isActive: true } });
     const matchedRoleIds = [...new Set(rules.filter((rule) =>
       (!rule.departmentId || rule.departmentId === employee.departmentId) &&
-      (!rule.positionId || rule.positionId === employee.positionId) &&
-      (!rule.branchId || employee.branchIds.includes(rule.branchId)),
+      (!rule.positionId || rule.positionId === employee.positionId),
     ).map((rule) => rule.roleId))];
 
     await tx.userRole.deleteMany({
@@ -40,8 +38,6 @@ export class RoleAssignmentService {
         userId: true,
         departmentId: true,
         positionId: true,
-        primaryBranchId: true,
-        branchAssignments: { where: { effectiveTo: null }, select: { branchId: true } },
       },
     });
     for (const employee of employees) {
@@ -49,7 +45,6 @@ export class RoleAssignmentService {
         userId: employee.userId,
         departmentId: employee.departmentId,
         positionId: employee.positionId,
-        branchIds: [...new Set([employee.primaryBranchId, ...employee.branchAssignments.map((item) => item.branchId)].filter((id): id is string => Boolean(id)))],
       });
     }
   }

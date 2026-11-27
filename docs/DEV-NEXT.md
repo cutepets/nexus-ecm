@@ -1,23 +1,16 @@
 # Development handoff
 
-Updated 2026-11-25. This is the short list for ongoing work; source and migrations remain authoritative.
+Updated 2026-11-27. Source code and migrations remain authoritative.
 
-## Done / still needs evidence
+## Pilot decisions
 
-- Phase 0–1 settings migration and configuration are present. Keep a successful acceptance run as release evidence; the previous long phase sheet has been retired.
-- Pilot decisions recorded: web `chamcong.petshophanoi.com`, API under `/api/v1`; Chrome Android, Safari iOS, Chrome desktop; overnight shifts are out of scope.
+- Web: `chamcong.petshophanoi.com`; API: `/api/v1`.
+- Target clients: Chrome on Android and desktop, Safari on iOS. Overnight shifts are out of scope.
 
-## Before the pilot
+## Still needed
 
-- Admin/operations must supply pilot branch, employee IDs/count, dates and shifts, device/OS/browser versions and testers.
-- POS/KPI owner must supply provider, technical owner, sandbox/production environment, employee ID mapping, public HTTPS webhook URL and secret handoff.
-- Run attendance check-in/out, camera/GPS permission and approval flows on every target device. Verify OT approval, missing-punch correction and timesheet recalculation.
-- Verify POS KPI idempotency (`Idempotency-Key`) and webhook HMAC, retry, and dead-letter evidence.
-- Capture pilot results; do not call the pilot complete until each item has evidence.
+- Operations: pilot branch, employee IDs/count, dates, shifts, device/browser versions, and testers.
+- POS/KPI owner: provider, technical contact, environment, employee-ID mapping, HTTPS webhook URL, and secret handoff.
+- Capture acceptance evidence for attendance check-in/out, camera/GPS permissions, approvals, overtime, missing-punch correction, timesheet recalculation, and POS/KPI idempotency, HMAC, retries, and dead-letter handling.
 
-## Avoid these failures
-
-- Use only synthetic demo data. `SEED_DEMO_DATA=true pnpm db:seed` creates idempotent `HN-DEMO`, `HCM-DEMO`, and `DEMO-001`; it contains no real biometrics, GPS, credentials, or usable API keys.
-- Time and payroll calculations must use the configured company timezone (default `Asia/Ho_Chi_Minh`), including timestamps around UTC midnight.
-- Back up PostgreSQL before production migrations. Never edit an applied migration; rollback only after confirming no running app uses the new columns/types.
-- Local development needs `.env`, Node 20+, pnpm 9+, and the compose services; see `docs/system-map.md`.
+Do not call the pilot complete until each item has recorded evidence. Use only synthetic demo data. Calculate time and payroll in the configured company timezone (`Asia/Ho_Chi_Minh` by default).

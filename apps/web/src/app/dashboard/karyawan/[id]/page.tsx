@@ -38,6 +38,12 @@ function historyFieldLabel(field: string) {
   return ({ basicSalary: 'Lương cơ bản', spaBonusPercent: 'Thưởng Spa', employmentType: 'Loại hình', jobTitle: 'Chức danh', positionId: 'Chức vụ', departmentId: 'Phòng ban', primaryBranchId: 'Chi nhánh chính', branchIds: 'Các chi nhánh', workScheduleIds: 'Ca làm nền', workStatus: 'Trạng thái làm việc' } as Record<string, string>)[field] ?? field;
 }
 
+function historyDisplayValue(value: unknown) {
+  if (value === 'Toàn thời gian') return 'Full Time';
+  if (value === 'Bán thời gian') return 'Part Time';
+  return String(value ?? '—');
+}
+
 function initials(name: string) {
   return name.split(' ').slice(0, 2).map((w) => w[0]?.toUpperCase()).join('');
 }
@@ -135,7 +141,7 @@ export default function EmployeeDetailPage() {
         <div className="flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-2xl font-semibold">{data.fullName}</h2>
-            <StatusBadge status={data.workStatus} />
+            <StatusBadge status={data.workStatus} label={data.workStatus === 'INACTIVE' ? 'Thôi việc' : undefined} />
           </div>
           <p className="text-sm text-ink-muted">
             @{data.user?.username ?? data.employeeNo} · {data.phone ?? 'Chưa có SĐT'} · {data.position?.title ?? 'Chưa có chức danh'} ·{' '}
@@ -151,7 +157,7 @@ export default function EmployeeDetailPage() {
 
         <TabsContent value="info" className="pb-6 pt-6">
           <div className="grid gap-6 lg:grid-cols-2">
-            <ProfileCard icon={<ContactIcon />} title="Thông tin cơ bản"><ProfileField label="Email" value={data.email} /><ProfileField label="Điện thoại" value={data.phone} /><ProfileField label="Ngày sinh" value={data.dateOfBirth ? formatDate(data.dateOfBirth) : null} /><ProfileField label="Giới tính" value={data.gender === 'MALE' ? 'Nam' : data.gender === 'FEMALE' ? 'Nữ' : data.gender === 'OTHER' ? 'Khác' : data.gender === 'UNDISCLOSED' ? 'Không muốn nêu' : null} /><ProfileField label="CCCD / CMND" value={data.identityCode} /><ProfileField label="Liên hệ khẩn cấp" value={[data.emergencyContactName, data.emergencyContactPhone].filter(Boolean).join(' · ')} /><ProfileField label="Quản lý trực tiếp" value={data.manager?.fullName} /><ProfileField label="Địa chỉ" value={data.address} /></ProfileCard>
+            <ProfileCard icon={<ContactIcon />} title="Thông tin cơ bản"><ProfileField label="Email" value={data.email} /><ProfileField label="Điện thoại" value={data.phone} /><ProfileField label="Ngày sinh" value={data.dateOfBirth ? formatDate(data.dateOfBirth) : null} /><ProfileField label="Giới tính" value={data.gender === 'MALE' ? 'Nam' : data.gender === 'FEMALE' ? 'Nữ' : data.gender === 'OTHER' ? 'Khác' : data.gender === 'UNDISCLOSED' ? 'Không muốn nêu' : null} /><ProfileField label="CCCD / CMND" value={data.identityCode} /><ProfileField label="Liên hệ khẩn cấp" value={[data.emergencyContactName, data.emergencyContactPhone].filter(Boolean).join(' · ')} /><ProfileField label="Địa chỉ" value={data.address} /></ProfileCard>
             <ProfileCard icon={<BriefcaseBusiness className="size-5" />} title="Hợp đồng & ca làm"><ProfileField label="Ngày vào làm" value={formatDate(data.joinDate)} /><ProfileField label="Thâm niên" value={tenure(data.joinDate, data.exitDate)} /><ProfileField label="Phòng ban / chức danh" value={[data.department?.name, data.position?.title ?? data.jobTitle ?? 'Nhân viên'].filter(Boolean).join(' · ')} /><ProfileField label="Ca làm" value={data.workScheduleAssignments?.map(({ workSchedule }) => `${workSchedule.name} (${workSchedule.startTime}–${workSchedule.endTime})`).join(', ')} /><ProfileField label="Chi nhánh" value={data.primaryBranch?.name ?? data.branchAssignments?.map(({ branch }) => branch.name).join(', ')} /><ProfileField label="Ngày nghỉ việc" value={data.exitDate ? formatDate(data.exitDate) : null} />{canReadPayroll && <><ProfileField label="Mã số thuế" value={data.taxCode} /><ProfileField label="Ngân hàng / STK" value={[data.salaryBankName, data.salaryBankAccount].filter(Boolean).join(' · ')} /></>}</ProfileCard>
           </div>
         </TabsContent>
@@ -166,9 +172,9 @@ export default function EmployeeDetailPage() {
                     <div><p className="font-medium">{historyTypeLabel(item.entry.changeType)}</p><p className="mt-1 text-sm text-ink-muted">Hiệu lực {formatDate(item.date)}{item.entry.decisionNumber ? ` · Quyết định ${item.entry.decisionNumber}` : ''}</p></div>
                     {item.entry.reason && <p className="max-w-xl text-sm text-ink-muted">{item.entry.reason}</p>}
                   </div>
-                  <ul className="mt-3 space-y-1 text-sm">{item.entry.changes.map((change, index) => <li key={`${item.id}-${index}`}><span className="font-medium">{historyFieldLabel(change.field)}:</span> {String(change.before ?? '—')} → {String(change.after ?? '—')}</li>)}</ul>
+                    <ul className="mt-3 space-y-1 text-sm">{item.entry.changes.map((change, index) => <li key={`${item.id}-${index}`}><span className="font-medium">{historyFieldLabel(change.field)}:</span> {historyDisplayValue(change.before)} → {historyDisplayValue(change.after)}</li>)}</ul>
                   {item.entry.documents.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{item.entry.documents.map((document) => <a key={document.id} href={document.fileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-canvas px-3 py-1.5 text-sm text-purple-700 hover:underline"><FileText size={15} />{document.fileName}<ExternalLink size={13} /></a>)}</div>}
-                </> : item.kind === 'job' ? <><p className="font-medium">Thay đổi chức vụ</p><p className="mt-1 text-sm">{item.entry.position?.title ?? '—'}{item.entry.department ? ` · ${item.entry.department.name}` : ''}</p><p className="mt-1 text-sm text-ink-muted">Hiệu lực {formatDate(item.date)}{item.entry.endDate ? ` · Kết thúc ${formatDate(item.entry.endDate)}` : ''}</p>{item.entry.note && <p className="mt-1 text-sm text-ink-muted">{item.entry.note}</p>}</> : <><p className="font-medium">Điều chỉnh lương</p><p className="mt-1 text-sm">{formatCurrency(Number(item.entry.amount))} {item.entry.currency}</p><p className="mt-1 text-sm text-ink-muted">Hiệu lực {formatDate(item.date)}{item.entry.reason ? ` · ${item.entry.reason}` : ''}</p></>}
+                </> : item.kind === 'job' ? <><p className="font-medium">Thay đổi chức vụ</p><p className="mt-1 text-sm">{item.entry.position?.title ?? '—'}{item.entry.department ? ` · ${item.entry.department.name}` : ''}</p><p className="mt-1 text-sm text-ink-muted">Hiệu lực {formatDate(item.date)}{item.entry.endDate ? ` · Kết thúc ${formatDate(item.entry.endDate)}` : ''}</p>{item.entry.note && <p className="mt-1 text-sm text-ink-muted">{item.entry.note}</p>}</> : <><p className="font-medium">Điều chỉnh lương</p><p className="mt-1 text-right text-sm">{formatCurrency(Number(item.entry.amount))}</p><p className="mt-1 text-sm text-ink-muted">Hiệu lực {formatDate(item.date)}{item.entry.reason ? ` · ${item.entry.reason}` : ''}</p></>}
               </article>)}
             </div>
           ) : <p className="mb-6 text-sm text-ink-muted">Chưa có mốc thay đổi dài hạn.</p>}
@@ -246,7 +252,7 @@ export default function EmployeeDetailPage() {
           </form>
         </DialogContent>
       </Dialog>
-      <EmploymentUpdateDialog employeeId={id} currentStatus={data.workStatus} onOpen={employmentUpdateOpen} onClose={() => setEmploymentUpdateOpen(false)} onSaved={() => {}} />
+      <EmploymentUpdateDialog employeeId={id} currentStatus={data.workStatus} probationDays={data.probationDays ?? 20} onOpen={employmentUpdateOpen} onClose={() => setEmploymentUpdateOpen(false)} onSaved={() => {}} />
     </div>
   );
 }
@@ -280,7 +286,7 @@ function tenure(joinDate: string, exitDate?: string | null) {
     start.getUTCMonth();
   if (end.getUTCDate() < start.getUTCDate()) months--;
   if (months < 0) return "—";
-  if (months === 0) return "Dưới 1 tháng";
+  if (months === 0) return `${Math.floor((end.getTime() - start.getTime()) / 86_400_000)} ngày`;
 
   const years = Math.floor(months / 12);
   const remainingMonths = months % 12;
@@ -304,7 +310,7 @@ function SalaryTab({
           {entries.map((s) => (
             <div key={s.id} className="flex items-center justify-between border-b border-border px-4 py-3 last:border-0">
               <div>
-                <div className="text-sm font-medium">{formatCurrency(Number(s.amount))}</div>
+                <div className="text-right text-sm font-medium">{formatCurrency(Number(s.amount))}</div>
                 {s.reason && <div className="text-xs text-ink-subtle">{s.reason}</div>}
               </div>
               <div className="text-xs text-ink-muted">{formatDate(s.effectiveDate)}</div>

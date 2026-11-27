@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ProjectsService } from './projects.service';
 import { AddMemberDto, CreateProjectDto, UpdateProjectDto, UpsertMilestoneDto } from './dto/project.dto';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
-import { CurrentUser, RequestUser } from '../../common/decorators/current-user.decorator';
+import { branchIdsForPeriod, CurrentUser, permissionScope, RequestUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('projects')
 @ApiBearerAuth()
@@ -14,15 +14,16 @@ export class ProjectsController {
   @Get()
   @RequirePermissions('project:read')
   @ApiOperation({ summary: 'List projects' })
-  list(@Query('status') status?: string) {
-    return this.projects.list(status);
+  list(@Query('status') status: string | undefined, @CurrentUser() user: RequestUser) {
+    const access = this.readScope(user, 'project:read');
+    return this.projects.list(status, access);
   }
 
   @Get(':id')
   @RequirePermissions('project:read')
   @ApiOperation({ summary: 'Project detail with members & milestones' })
-  getOne(@Param('id') id: string) {
-    return this.projects.getById(id);
+  getOne(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.projects.getById(id, this.readScope(user, 'project:read'));
   }
 
   @Post()
@@ -83,5 +84,14 @@ export class ProjectsController {
   @ApiOperation({ summary: 'Delete a milestone' })
   removeMilestone(@Param('milestoneId') milestoneId: string) {
     return this.projects.removeMilestone(milestoneId);
+  }
+
+  private readScope(user: RequestUser, permission: string) {
+    const scope = permissionScope(user, permission);
+    const from = new Date();
+    from.setDate(1);
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(from.getFullYear(), from.getMonth() + 1, 0, 23, 59, 59, 999);
+    return { scope, employeeId: user.employeeId, branchIds: branchIdsForPeriod(user, from, to), from, to };
   }
 }

@@ -14,11 +14,12 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { formatCurrency } from '@/lib/utils';
-import { useEmployees, useDepartments } from '@/features/employees/api';
+import { useEmployees, useDepartments, useEmployeeBranches } from '@/features/employees/api';
 import { useAuthStore } from '@/stores/auth-store';
 import type { EmployeeListItem } from '@nexus/shared';
 import { EmployeeExcelActions } from '@/features/employees/employee-excel-actions';
 import { EnrollScanner } from '@/features/attendance/enroll-scanner';
+import { employeeDateMarker } from '@/features/employees/employee-date-marker';
 
 function initials(name: string) {
   return name.split(' ').slice(0, 2).map((w) => w[0]?.toUpperCase()).join('');
@@ -28,6 +29,43 @@ function formatDateOnly(value?: string | null) {
   if (!value) return '—';
   const [year, month, day] = value.slice(0, 10).split('-');
   return year && month && day ? `${day}/${month}/${year}` : '—';
+}
+
+function formatTenure(joinDate: string, exitDate?: string | null) {
+  const toCalendarDate = (value: string) => {
+    const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+    return year && month && day ? new Date(Date.UTC(year, month - 1, day)) : null;
+  };
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
+  const start = toCalendarDate(joinDate);
+  const end = toCalendarDate(exitDate ?? today);
+  if (!start || !end) return '—';
+  if (end.getTime() < start.getTime()) return '—';
+  let months = (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + end.getUTCMonth() - start.getUTCMonth();
+  if (end.getUTCDate() < start.getUTCDate()) months -= 1;
+  if (months < 0) return '—';
+  if (months === 0) return `${Math.floor((end.getTime() - start.getTime()) / 86_400_000)} ngày`;
+  const years = Math.floor(months / 12);
+  const remainingMonths = months % 12;
+  return [years ? `${years} năm` : null, remainingMonths ? `${remainingMonths} tháng` : null].filter(Boolean).join(' ');
+}
+
+function tenureDaysUnderOneMonth(employee: EmployeeListItem) {
+  const tenure = formatTenure(employee.joinDate, employee.exitDate);
+  return tenure.endsWith(' ngày') ? Number(tenure.split(' ')[0]) : null;
+}
+
+function daysUntilExit(exitDate?: string | null) {
+  if (!exitDate) return null;
+  const toCalendarDate = (value: string) => {
+    const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+    return year && month && day ? new Date(Date.UTC(year, month - 1, day)) : null;
+  };
+  const todayText = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
+  const today = toCalendarDate(todayText);
+  const end = toCalendarDate(exitDate);
+  if (!today || !end || end.getTime() < today.getTime()) return null;
+  return Math.floor((end.getTime() - today.getTime()) / 86_400_000);
 }
 
 function formatDateTime(value?: string | null) {
@@ -61,7 +99,6 @@ const EMPLOYEE_HIDDEN_COLUMNS: Record<string, boolean> = {
   primaryBranch: false,
   branchAssignments: false,
   workScheduleAssignments: false,
-  manager: false,
   exitDate: false,
   accountEmail: false,
   accountRoles: false,
@@ -72,7 +109,11 @@ const EMPLOYEE_HIDDEN_COLUMNS: Record<string, boolean> = {
 export default function KaryawanPage() {
   const router = useRouter();
   const [departmentId, setDepartmentId] = useState('');
-  const [workStatus, setWorkStatus] = useState('');
+  const [workStatus, setWorkStatus] = useState('DEFAULT');
+  const isUpcomingExitFilter = workStatus === 'UPCOMING_EXIT';
+  const includesUpcomingExit = workStatus === 'DEFAULT' || isUpcomingExitFilter;
+  const statusFilter = workStatus === 'DEFAULT' ? 'PROBATION,PERMANENT,ON_LEAVE' : isUpcomingExitFilter ? undefined : workStatus || undefined;
+  const [branchId, setBranchId] = useState('');
   const [search, setSearch] = useState('');
   const [faceEmployee, setFaceEmployee] = useState<EmployeeListItem | null>(null);
   const hasPermission = useAuthStore((state) => state.hasPermission);
@@ -82,10 +123,13 @@ export default function KaryawanPage() {
   const canReadPayroll = hasPermission('payroll:read');
 
   const { data: departments } = useDepartments();
+  const { data: branches } = useEmployeeBranches();
   const { data, isLoading, isError } = useEmployees({
     pageSize: 100,
     departmentId: departmentId || undefined,
-    workStatus: workStatus || undefined,
+    workStatus: statusFilter,
+    upcomingExit: includesUpcomingExit || undefined,
+    branchId: branchId || undefined,
   });
   const filteredEmployees = useMemo(() => {
     const items = isError ? [] : data?.items ?? [];
@@ -108,9 +152,15 @@ export default function KaryawanPage() {
         size: 220,
         cell: ({ row }) => (
           <div className="flex items-center gap-3">
-            <Avatar className="size-8">
-              <AvatarFallback className="text-xs">{initials(row.original.fullName)}</AvatarFallback>
-            </Avatar>
+            <span className="relative shrink-0">
+              <Avatar className="size-8">
+                <AvatarFallback className="text-xs">{initials(row.original.fullName)}</AvatarFallback>
+              </Avatar>
+              {(() => {
+                const marker = employeeDateMarker(row.original.joinDate, row.original.exitDate);
+                return marker && <span className={`absolute -right-1 -top-1 inline-flex size-4 items-center justify-center rounded-full text-[9px] font-bold ${marker.tone === 'rose' ? 'bg-rose-200 text-rose-800' : 'bg-amber-100 text-amber-900'}`} title={marker.title}>{marker.value}</span>;
+              })()}
+            </span>
             <div>
               <div className="font-medium">{row.original.fullName}</div>
             </div>
@@ -130,12 +180,21 @@ export default function KaryawanPage() {
       {
         accessorKey: 'workStatus',
         header: 'Trạng thái',
-        cell: ({ row }) => <StatusBadge status={row.original.workStatus} />,
+        cell: ({ row }) => {
+          const upcoming = daysUntilExit(row.original.exitDate) !== null;
+          return <StatusBadge status={upcoming ? 'UPCOMING_EXIT' : row.original.workStatus} label={upcoming ? 'Sắp nghỉ' : row.original.workStatus === 'INACTIVE' ? 'Thôi việc' : undefined} />;
+        },
       },
       {
         accessorKey: 'joinDate',
         header: 'Ngày vào làm',
         cell: ({ row }) => formatDateOnly(row.original.joinDate),
+      },
+      {
+        id: 'tenure',
+        header: 'Thâm niên',
+        accessorFn: (row) => formatTenure(row.joinDate, row.exitDate),
+        cell: ({ row }) => <span className={tenureDaysUnderOneMonth(row.original) !== null ? 'rounded-lg bg-amber-50 px-2 py-1 font-semibold text-amber-900' : ''}>{formatTenure(row.original.joinDate, row.original.exitDate)}</span>,
       },
       {
         id: 'username',
@@ -183,7 +242,7 @@ export default function KaryawanPage() {
       {
         id: 'employmentType',
         header: 'Loại hình làm việc',
-        accessorFn: (row) => row.employmentType === 'FULL_TIME' ? 'Toàn thời gian' : row.employmentType === 'PART_TIME' ? 'Bán thời gian' : '—',
+        accessorFn: (row) => row.employmentType === 'FULL_TIME' ? 'Full Time' : row.employmentType === 'PART_TIME' ? 'Part Time' : '—',
       },
       {
         id: 'primaryBranch',
@@ -199,11 +258,6 @@ export default function KaryawanPage() {
         id: 'workScheduleAssignments',
         header: 'Ca làm',
         accessorFn: (row) => row.workScheduleAssignments?.map(({ workSchedule }) => `${workSchedule.name} (${workSchedule.startTime}–${workSchedule.endTime})`).join(', ') ?? '—',
-      },
-      {
-        id: 'manager',
-        header: 'Quản lý trực tiếp',
-        accessorFn: (row) => row.manager?.fullName ?? '—',
       },
       {
         id: 'exitDate',
@@ -239,6 +293,7 @@ export default function KaryawanPage() {
           id: 'basicSalary',
           header: 'Lương cơ bản',
           accessorFn: (row: EmployeeListItem) => row.basicSalary ? formatCurrency(Number(row.basicSalary)) : '—',
+          cell: ({ row }: { row: { original: EmployeeListItem } }) => <div className="text-right">{row.original.basicSalary ? formatCurrency(Number(row.original.basicSalary)) : '—'}</div>,
         },
         {
           id: 'spaBonusPercent',
@@ -265,7 +320,7 @@ export default function KaryawanPage() {
         ),
       }] : []),
     ],
-    [canEnrollFace, canReadPayroll],
+    [canEnrollFace, canReadPayroll, isUpcomingExitFilter],
   );
 
   return (
@@ -313,12 +368,19 @@ export default function KaryawanPage() {
               onChange={(event) => setWorkStatus(event.target.value)}
               className="w-auto"
             >
+              <option value="DEFAULT">Thử việc, chính thức, sắp nghỉ, tạm nghỉ</option>
               <option value="">Tất cả trạng thái</option>
+              <option value="PROBATION,PERMANENT">Thử việc và Chính thức</option>
               <option value="PROBATION">Thử việc</option>
               <option value="PERMANENT">Chính thức</option>
-              <option value="CONTRACT">Hợp đồng</option>
               <option value="ON_LEAVE">Tạm nghỉ</option>
-              <option value="INACTIVE">Ngừng làm việc</option>
+              <option value="INACTIVE">Thôi việc</option>
+              <option value="ABANDONED">Bỏ việc</option>
+              <option value="UPCOMING_EXIT">Sắp nghỉ</option>
+            </Select>
+            <Select value={branchId} onChange={(event) => setBranchId(event.target.value)} className="w-auto">
+              <option value="">Tất cả chi nhánh</option>
+              {branches?.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
             </Select>
           </>
         )}

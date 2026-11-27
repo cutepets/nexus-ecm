@@ -11,7 +11,7 @@ import {
   UpdateTaskDto,
 } from './dto/task.dto';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
-import { CurrentUser, RequestUser } from '../../common/decorators/current-user.decorator';
+import { branchIdsForPeriod, CurrentUser, permissionScope, RequestUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('tasks')
 @ApiBearerAuth()
@@ -22,15 +22,15 @@ export class TasksController {
   @Get()
   @RequirePermissions('task:read')
   @ApiOperation({ summary: 'List tasks (filter by project/assignee/status/priority)' })
-  list(@Query() query: TaskQueryDto) {
-    return this.tasks.list(query);
+  list(@Query() query: TaskQueryDto, @CurrentUser() user: RequestUser) {
+    return this.tasks.list(query, this.readScope(user));
   }
 
   @Get(':id')
   @RequirePermissions('task:read')
   @ApiOperation({ summary: 'Task detail with checklist, comments, attachments' })
-  getOne(@Param('id') id: string) {
-    return this.tasks.getById(id);
+  getOne(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.tasks.getById(id, this.readScope(user));
   }
 
   @Post()
@@ -113,5 +113,14 @@ export class TasksController {
   @RequirePermissions('task:update')
   removeAttachment(@Param('attachmentId') attachmentId: string) {
     return this.tasks.removeAttachment(attachmentId);
+  }
+
+  private readScope(user: RequestUser) {
+    const scope = permissionScope(user, 'task:read');
+    const from = new Date();
+    from.setDate(1);
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(from.getFullYear(), from.getMonth() + 1, 0, 23, 59, 59, 999);
+    return { scope, employeeId: user.employeeId, branchIds: branchIdsForPeriod(user, from, to), from, to };
   }
 }

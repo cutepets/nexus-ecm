@@ -178,7 +178,6 @@ export default function PengaturanPage() {
     <div className="space-y-6">
       <PageHeader
         title="Cài đặt"
-        description="Công ty, vận hành và kiểm soát hệ thống"
       />
 
       <div className="grid items-start gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">

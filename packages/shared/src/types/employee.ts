@@ -1,6 +1,6 @@
 /** Shared employee-domain types used by both API and web. */
 
-export type WorkStatus = 'PROBATION' | 'PERMANENT' | 'CONTRACT' | 'ON_LEAVE' | 'INACTIVE';
+export type WorkStatus = 'PROBATION' | 'PERMANENT' | 'ON_LEAVE' | 'INACTIVE' | 'ABANDONED';
 
 export type EmployeeDocType = 'KTP' | 'NPWP' | 'CV' | 'CONTRACT' | 'OTHER';
 
@@ -50,6 +50,7 @@ export interface EmployeeListItem {
   branchAssignments?: { id: string; branch: { id: string; code: string; name: string; address?: string | null } }[];
   workScheduleAssignments?: { id: string; workSchedule: { id: string; name: string; startTime: string; endTime: string } }[];
   workStatus: WorkStatus;
+  probationDays?: number;
   joinDate: string;
   department?: Pick<Department, 'id' | 'name' | 'code'> | null;
   position?: Pick<Position, 'id' | 'title'> | null;

@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DocumentsService } from './documents.service';
 import { AddVersionDto, CreateDocumentDto, CreateFolderDto, ShareDocumentDto } from './dto/document.dto';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
-import { CurrentUser, RequestUser } from '../../common/decorators/current-user.decorator';
+import { branchIdsForPeriod, CurrentUser, permissionScope, RequestUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('documents')
 @ApiBearerAuth()
@@ -21,8 +21,8 @@ export class DocumentsController {
 
   // ---- Documents ----
   @Get() @RequirePermissions('document:read')
-  list(@Query('folderId') folderId?: string, @Query('docType') docType?: string) {
-    return this.documents.listDocuments(folderId, docType);
+  list(@Query('folderId') folderId: string | undefined, @Query('docType') docType: string | undefined, @CurrentUser() user: RequestUser) {
+    return this.documents.listDocuments(folderId, docType, this.readScope(user));
   }
 
   @Post('uploads') @RequirePermissions('document:create')
@@ -30,7 +30,7 @@ export class DocumentsController {
   presign(@Body('fileName') fileName: string) { return this.documents.presignUpload(fileName); }
 
   @Get(':id') @RequirePermissions('document:read')
-  getOne(@Param('id') id: string) { return this.documents.getDocument(id); }
+  getOne(@Param('id') id: string, @CurrentUser() user: RequestUser) { return this.documents.getDocument(id, this.readScope(user)); }
 
   @Post() @RequirePermissions('document:create')
   create(@Body() dto: CreateDocumentDto, @CurrentUser() user: RequestUser) {
@@ -51,5 +51,14 @@ export class DocumentsController {
   @Delete(':id/shares/:userId') @RequirePermissions('document:update')
   unshare(@Param('id') id: string, @Param('userId') userId: string) {
     return this.documents.unshare(id, userId);
+  }
+
+  private readScope(user: RequestUser) {
+    const scope = permissionScope(user, 'document:read');
+    const from = new Date();
+    from.setDate(1);
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(from.getFullYear(), from.getMonth() + 1, 0, 23, 59, 59, 999);
+    return { scope, userId: user.id, branchIds: branchIdsForPeriod(user, from, to), from, to };
   }
 }

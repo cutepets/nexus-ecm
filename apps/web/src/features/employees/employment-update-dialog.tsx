@@ -25,8 +25,8 @@ const choices: { value: ChangeType; label: string }[] = [
   { value: 'TERMINATION', label: 'Cho thôi việc' },
 ];
 
-export function EmploymentUpdateDialog({ employeeId, currentStatus, onOpen, onClose, onSaved }: {
-  employeeId: string; currentStatus: string; onOpen: boolean; onClose: () => void; onSaved: () => void;
+export function EmploymentUpdateDialog({ employeeId, currentStatus, probationDays, onOpen, onClose, onSaved }: {
+  employeeId: string; currentStatus: string; probationDays: number; onOpen: boolean; onClose: () => void; onSaved: () => void;
 }) {
   const [changeType, setChangeType] = useState<ChangeType>(() => useAuthStore.getState().hasPermission('payroll:update') ? 'SALARY' : 'PROMOTION');
   const [departmentId, setDepartmentId] = useState('');
@@ -76,17 +76,20 @@ export function EmploymentUpdateDialog({ employeeId, currentStatus, onOpen, onCl
         const newDepartmentId = String(fd.get('departmentId') || '');
         const newPositionId = String(fd.get('positionId') || '');
         const branchId = String(fd.get('primaryBranchId') || '');
+        const newProbationDays = String(fd.get('probationDays') ?? '');
+        const hasProbationChange = newProbationDays !== '' && Number(newProbationDays) !== probationDays;
+        if (hasProbationChange) payload.probationDays = Number(newProbationDays);
         if (newDepartmentId) payload.departmentId = newDepartmentId;
         if (newPositionId) payload.positionId = newPositionId;
         if (branchId) {
           payload.primaryBranchId = branchId;
           payload.branchIds = [branchId];
         }
-        if (!newDepartmentId && !newPositionId && !branchId) { toast.error('Chọn chức vụ, phòng ban hoặc chi nhánh cần cập nhật.'); return; }
+        if (!newDepartmentId && !newPositionId && !branchId && !hasProbationChange) { toast.error('Chọn chức vụ, phòng ban hoặc chi nhánh cần cập nhật.'); return; }
       } else if (changeType === 'SCHEDULE') {
-        const workScheduleId = String(fd.get('workScheduleId') || '');
-        if (!workScheduleId) { toast.error('Chọn ca làm mặc định mới.'); return; }
-        payload.workScheduleId = workScheduleId;
+        const selectedWorkSchedule = String(fd.get('workScheduleId') || '');
+        if (!selectedWorkSchedule) { toast.error('Chọn ca làm mặc định mới.'); return; }
+        payload.workScheduleId = selectedWorkSchedule === '__EMPTY__' ? '' : selectedWorkSchedule;
       } else if (changeType === 'EMPLOYMENT_TYPE') {
         payload.employmentType = String(fd.get('employmentType'));
       } else if (changeType === 'WORK_STATUS') {
@@ -110,17 +113,18 @@ export function EmploymentUpdateDialog({ employeeId, currentStatus, onOpen, onCl
           </Select></div>
           <div><Label className="flex items-center gap-2"><CalendarDays size={15} />Ngày hiệu lực</Label><Input name="effectiveDate" type="date" defaultValue={vietnamToday()} required /></div>
           {changeType === 'SALARY' && <>
-            <div><Label>Lương cơ bản mới (₫)</Label><Input name="basicSalary" type="number" min="0" step="any" placeholder="Để trống nếu không đổi" /></div>
+            <div><Label>Lương cơ bản mới (đ)</Label><Input className="text-right" name="basicSalary" type="number" min="0" step="any" placeholder="Để trống nếu không đổi" /></div>
             <div><Label>Thưởng Spa mới (%)</Label><Input name="spaBonusPercent" type="number" min="0" max="100" step="any" placeholder="Để trống nếu không đổi" /></div>
           </>}
           {changeType === 'PROMOTION' && <>
             <div><Label>Phòng ban mới</Label><Select value={departmentId} onChange={(event) => setDepartmentId(event.target.value)}><option value="">Giữ nguyên</option>{departments?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></div>
             <div><Label>Chức vụ mới</Label><Select name="positionId"><option value="">Giữ nguyên</option>{positions?.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</Select><input type="hidden" name="departmentId" value={departmentId} /></div>
             <div className="sm:col-span-2"><Label>Chi nhánh chính mới</Label><Select name="primaryBranchId" defaultValue=""><option value="">Giữ nguyên</option>{branches?.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></div>
+            <div><Label>Số ngày thử việc</Label><Input name="probationDays" type="number" min={0} step={1} defaultValue={probationDays} /></div>
           </>}
-          {changeType === 'SCHEDULE' && <div className="sm:col-span-2"><Label>Ca làm mặc định mới</Label><Select name="workScheduleId" defaultValue=""><option value="">Chọn ca</option>{schedules?.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.startTime}–{item.endTime}</option>)}</Select></div>}
-          {changeType === 'EMPLOYMENT_TYPE' && <div className="sm:col-span-2"><Label>Loại hình mới</Label><Select name="employmentType"><option value="FULL_TIME">Toàn thời gian</option><option value="PART_TIME">Bán thời gian</option></Select></div>}
-          {changeType === 'WORK_STATUS' && <div className="sm:col-span-2"><Label>Trạng thái làm việc</Label><Select name="workStatus" defaultValue={currentStatus === 'ON_LEAVE' ? 'PERMANENT' : currentStatus}><option value="PROBATION">Thử việc</option><option value="PERMANENT">Chính thức</option><option value="CONTRACT">Hợp đồng</option><option value="ON_LEAVE">Tạm nghỉ</option></Select></div>}
+          {changeType === 'SCHEDULE' && <div className="sm:col-span-2"><Label>Ca làm mặc định mới</Label><Select name="workScheduleId" defaultValue=""><option value="">Chọn ca</option><option value="__EMPTY__">Trống</option>{[...(schedules ?? [])].sort((left, right) => left.displayOrder - right.displayOrder).map((item) => <option key={item.id} value={item.id}>{item.name} · {item.startTime}–{item.endTime}</option>)}</Select></div>}
+          {changeType === 'EMPLOYMENT_TYPE' && <div className="sm:col-span-2"><Label>Loại hình mới</Label><Select name="employmentType"><option value="FULL_TIME">Full Time</option><option value="PART_TIME">Part Time</option></Select></div>}
+          {changeType === 'WORK_STATUS' && <div className="sm:col-span-2"><Label>Trạng thái làm việc</Label><Select name="workStatus" defaultValue={currentStatus === 'ON_LEAVE' ? 'PERMANENT' : currentStatus}><option value="PROBATION">Thử việc</option><option value="PERMANENT">Chính thức</option><option value="ON_LEAVE">Tạm nghỉ</option><option value="ABANDONED">Bỏ việc</option></Select></div>}
           {changeType === 'TERMINATION' && <p className="sm:col-span-2 rounded-xl bg-red-50 p-3 text-sm text-red-700">Tài khoản nhân viên sẽ bị khóa và các phiên đăng nhập sẽ bị thu hồi kể từ ngày hiệu lực.</p>}
           <div className="sm:col-span-2"><Label>Nội dung bổ sung</Label><Textarea name="details" rows={3} placeholder="Ghi thêm nội dung, căn cứ hoặc phạm vi thay đổi" /></div>
           <div><Label>Số quyết định</Label><Input name="decisionNumber" placeholder="Không bắt buộc" /></div>

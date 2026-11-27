@@ -10,6 +10,14 @@ const DETAIL_INCLUDE = {
   _count: { select: { tasks: true } },
 };
 
+interface EmployeeReadScope {
+  scope: 'ALL' | 'BRANCH' | 'SELF' | 'NONE';
+  employeeId?: string | null;
+  branchIds: string[];
+  from: Date;
+  to: Date;
+}
+
 @Injectable()
 export class ProjectsService {
   constructor(
@@ -17,18 +25,41 @@ export class ProjectsService {
     private readonly audit: AuditService,
   ) {}
 
-  list(status?: string) {
+  list(status?: string, access?: EmployeeReadScope) {
+    const scopeWhere = this.projectReadScopeWhere(access);
     return this.prisma.project.findMany({
-      where: status ? { status: status as Prisma.ProjectWhereInput['status'] } : undefined,
+      where: { ...(status ? { status: status as Prisma.ProjectWhereInput['status'] } : {}), ...(scopeWhere ? { AND: [scopeWhere] } : {}) },
       include: { _count: { select: { tasks: true, members: true } } },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async getById(id: string) {
-    const project = await this.prisma.project.findUnique({ where: { id }, include: DETAIL_INCLUDE });
+  async getById(id: string, access?: EmployeeReadScope) {
+    const scopeWhere = this.projectReadScopeWhere(access);
+    const project = await this.prisma.project.findFirst({ where: { id, ...(scopeWhere ? { AND: [scopeWhere] } : {}) }, include: DETAIL_INCLUDE });
     if (!project) throw new NotFoundException('Project not found');
     return project;
+  }
+
+  private projectReadScopeWhere(access?: EmployeeReadScope): Prisma.ProjectWhereInput | null {
+    if (!access || access.scope === 'ALL') return null;
+    if (access.scope === 'SELF') return { OR: [{ managerId: access.employeeId ?? '__none__' }, { members: { some: { employeeId: access.employeeId ?? '__none__' } } }] };
+    if (access.scope === 'NONE' || !access.branchIds.length) return { id: '__none__' };
+    return {
+      members: {
+        some: {
+          employee: {
+            branchAssignments: {
+              some: {
+                branchId: { in: access.branchIds },
+                effectiveFrom: { lte: access.to },
+                OR: [{ effectiveTo: null }, { effectiveTo: { gte: access.from } }],
+              },
+            },
+          },
+        },
+      },
+    };
   }
 
   async create(dto: CreateProjectDto, ctx: AuditContext) {

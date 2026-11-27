@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { Prisma } from '@nexus/database';
 import { PrismaService } from '../../core/prisma/prisma.service';
@@ -8,6 +8,7 @@ import { CreateEmployeeDto, UpdateEmployeeDto, EmployeeQueryDto, TerminateEmploy
 import { CreateJobHistoryDto, CreateSalaryHistoryDto } from './dto/history.dto';
 import { CreateDocumentDto, PresignCreateEmployeeUploadDto, PresignUploadDto } from './dto/document.dto';
 import { normalizeVietnamesePhone } from '../../common/utils/login-identifier';
+import { workDateInTimeZone } from '../../common/utils/company-time';
 import { RoleAssignmentService } from '../rbac/role-assignment.service';
 
 const LIST_SELECT = {
@@ -27,6 +28,7 @@ const LIST_SELECT = {
   employmentType: true,
   exitDate: true,
   workStatus: true,
+  probationDays: true,
   joinDate: true,
   department: { select: { id: true, name: true, code: true } },
   position: { select: { id: true, title: true } },
@@ -47,8 +49,20 @@ const LIST_SELECT = {
 
 const SORTABLE = new Set(['fullName', 'employeeNo', 'joinDate', 'createdAt', 'workStatus']);
 
+interface EmployeeReadScope {
+  scope: 'ALL' | 'BRANCH' | 'SELF' | 'NONE';
+  employeeId?: string | null;
+  branchIds: string[];
+  from: Date;
+  to: Date;
+}
+
 @Injectable()
-export class EmployeesService {
+export class EmployeesService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(EmployeesService.name);
+  private probationTimer?: NodeJS.Timeout;
+  private probationPromotionRunning = false;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
@@ -56,11 +70,92 @@ export class EmployeesService {
     private readonly roleAssignments: RoleAssignmentService,
   ) {}
 
-  async list(query: EmployeeQueryDto, includeCompensation = false) {
+  onModuleInit() {
+    void this.promoteCompletedProbation();
+    this.probationTimer = setInterval(() => void this.promoteCompletedProbation(), 24 * 60 * 60_000);
+  }
+
+  onModuleDestroy() {
+    if (this.probationTimer) clearInterval(this.probationTimer);
+  }
+
+  private async promoteCompletedProbation() {
+    if (this.probationPromotionRunning) return;
+    this.probationPromotionRunning = true;
+    try {
+      const dateParts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).formatToParts(new Date());
+      const part = (type: Intl.DateTimeFormatPartTypes) => Number(dateParts.find((value) => value.type === type)?.value);
+      const today = new Date(Date.UTC(part('year'), part('month') - 1, part('day')));
+      const probationEmployees = await this.prisma.employee.findMany({
+        where: { workStatus: 'PROBATION', deletedAt: null },
+        select: { id: true, joinDate: true, probationDays: true },
+      });
+      let promoted = 0;
+      for (const employee of probationEmployees) {
+        const joinDate = new Date(Date.UTC(employee.joinDate.getUTCFullYear(), employee.joinDate.getUTCMonth(), employee.joinDate.getUTCDate()));
+        const daysWorked = Math.floor((today.getTime() - joinDate.getTime()) / 86_400_000);
+        if (daysWorked < Math.max(0, employee.probationDays)) continue;
+        const effectiveDate = new Date(joinDate);
+        effectiveDate.setUTCDate(effectiveDate.getUTCDate() + Math.max(0, employee.probationDays));
+        await this.prisma.$transaction(async (tx) => {
+          const result = await tx.employee.updateMany({
+            where: { id: employee.id, workStatus: 'PROBATION', deletedAt: null },
+            data: { workStatus: 'PERMANENT' },
+          });
+          if (!result.count) return;
+          await tx.employmentHistory.create({
+            data: {
+              employeeId: employee.id,
+              effectiveDate,
+              changeType: 'WORK_STATUS',
+              reason: 'Hoàn thành thời gian thử việc.',
+              changes: [{ field: 'workStatus', before: 'Thử việc', after: 'Chính thức' }],
+            },
+          });
+          promoted += 1;
+        });
+      }
+      if (promoted) this.logger.log(`Automatically promoted ${promoted} employees after probation.`);
+    } catch (error) {
+      this.logger.error(`Probation status automation failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      this.probationPromotionRunning = false;
+    }
+  }
+
+  async listBranchesForEmployeeAccess(access: EmployeeReadScope) {
+    if (access.scope === 'NONE') return [];
+    let allowedBranchIds: string[] | undefined;
+    if (access.scope === 'BRANCH') allowedBranchIds = access.branchIds;
+    if (access.scope === 'SELF') {
+      if (!access.employeeId) return [];
+      const employee = await this.prisma.employee.findUnique({
+        where: { id: access.employeeId },
+        select: {
+          primaryBranchId: true,
+          branchAssignments: { where: { effectiveTo: null }, select: { branchId: true } },
+        },
+      });
+      allowedBranchIds = [...new Set([employee?.primaryBranchId, ...(employee?.branchAssignments.map(({ branchId }) => branchId) ?? [])].filter((id): id is string => Boolean(id)))];
+    }
+    if (allowedBranchIds && !allowedBranchIds.length) return [];
+    return this.prisma.branch.findMany({
+      where: { isActive: true, ...(allowedBranchIds ? { id: { in: allowedBranchIds } } : {}) },
+      select: { id: true, name: true },
+      orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
+    });
+  }
+
+  async list(query: EmployeeQueryDto, includeCompensation = false, access?: EmployeeReadScope) {
     const page = Math.max(1, query.page ?? 1);
     const pageSize = Math.min(100, Math.max(1, query.pageSize ?? 10));
     const sortBy = SORTABLE.has(query.sortBy ?? '') ? query.sortBy! : 'createdAt';
     const sortOrder = query.sortOrder === 'asc' ? 'asc' : 'desc';
+    const today = query.upcomingExit
+      ? new Date(`${new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())}T00:00:00.000Z`)
+      : undefined;
     const select: Prisma.EmployeeSelect = includeCompensation
       ? {
           ...LIST_SELECT,
@@ -75,7 +170,7 @@ export class EmployeesService {
     const where: Prisma.EmployeeWhereInput = {
       deletedAt: null,
       ...(query.departmentId ? { departmentId: query.departmentId } : {}),
-      ...(query.workStatus ? { workStatus: query.workStatus } : {}),
+      ...(!query.upcomingExit && query.workStatus?.length ? { workStatus: { in: query.workStatus } } : {}),
       ...(query.search
         ? {
             OR: [
@@ -88,6 +183,22 @@ export class EmployeesService {
           }
         : {}),
     };
+    const filters: Prisma.EmployeeWhereInput[] = [];
+    if (today) filters.push({
+      OR: [
+        ...(query.workStatus?.length ? [{ workStatus: { in: query.workStatus } }] : []),
+        { exitDate: { gte: today } },
+      ],
+    });
+    if (query.branchId) filters.push({
+      OR: [
+        { primaryBranchId: query.branchId },
+        { branchAssignments: { some: { branchId: query.branchId, effectiveTo: null } } },
+      ],
+    });
+    const scopeWhere = this.employeeReadScopeWhere(access);
+    if (scopeWhere) filters.push(scopeWhere);
+    if (filters.length) where.AND = filters;
 
     const [items, total] = await this.prisma.$transaction([
       this.prisma.employee.findMany({
@@ -103,9 +214,10 @@ export class EmployeesService {
     return { items, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
   }
 
-  async getById(id: string, includeCompensation = false) {
+  async getById(id: string, includeCompensation = false, access?: EmployeeReadScope) {
+    const scopeWhere = this.employeeReadScopeWhere(access);
     const employee = await this.prisma.employee.findFirst({
-      where: { id, deletedAt: null },
+      where: { AND: [{ id, deletedAt: null }, ...(scopeWhere ? [scopeWhere] : [])] },
       include: {
         department: { select: { id: true, name: true, code: true } },
         position: { select: { id: true, title: true } },
@@ -140,7 +252,11 @@ export class EmployeesService {
     if (!employee) throw new NotFoundException('Không tìm thấy nhân viên');
 
     // Turn stored object keys into temporary viewable URLs.
-    const photoUrl = employee.photoUrl ? await this.storage.presignedDownload(employee.photoUrl) : null;
+    const photoUrl = employee.photoUrl
+      ? /^https?:\/\//i.test(employee.photoUrl)
+        ? employee.photoUrl
+        : await this.storage.presignedDownload(employee.photoUrl)
+      : null;
     const documents = await Promise.all(
       employee.documents.map(async (d) => ({ ...d, fileUrl: await this.storage.presignedDownload(d.fileUrl) })),
     );
@@ -176,6 +292,33 @@ export class EmployeesService {
     };
   }
 
+  async suggestUsername(fullName: string) {
+    const parts = fullName
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[đĐ]/g, 'd')
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean);
+    const givenName = parts.pop() ?? '';
+    const initials = parts.map((part) => part[0]).join('');
+    let stem = `${initials}${givenName}`.slice(0, 30);
+    if (stem.length < 3) stem = `${stem || 'nv'}01`;
+
+    const existing = await this.prisma.user.findMany({
+      where: { username: { startsWith: stem } },
+      select: { username: true },
+    });
+    const usernames = new Set(existing.map(({ username }) => username.toLowerCase()));
+    if (!usernames.has(stem)) return { username: stem };
+
+    for (let suffix = 1; ; suffix += 1) {
+      const ending = String(suffix).padStart(2, '0');
+      const candidate = `${stem.slice(0, 32 - ending.length)}${ending}`;
+      if (!usernames.has(candidate)) return { username: candidate };
+    }
+  }
+
   async create(dto: CreateEmployeeDto, ctx: AuditContext, canManageCompensation = false, canManageAssignments = false) {
     this.ensureMayManageCompensation(dto, canManageCompensation);
     this.ensureMayManageAssignments(dto, canManageAssignments);
@@ -199,6 +342,7 @@ export class EmployeesService {
           employmentType: dto.employmentType ?? 'FULL_TIME', primaryBranchId: dto.primaryBranchId,
           departmentId: dto.departmentId, positionId: dto.positionId,
           managerId: dto.managerId, workStatus: dto.workStatus ?? 'PROBATION',
+          probationDays: dto.probationDays ?? 20,
           joinDate: new Date(dto.joinDate), exitDate: dto.exitDate ? new Date(dto.exitDate) : null,
           photoUrl: dto.photoUrl,
           documents:
@@ -219,7 +363,6 @@ export class EmployeesService {
         userId,
         departmentId: dto.departmentId ?? null,
         positionId: dto.positionId ?? null,
-        branchIds: [...new Set([dto.primaryBranchId, ...(dto.branchIds ?? [])])],
       });
       const initialValues: Record<string, unknown> = {
         basicSalary: dto.basicSalary?.toString() ?? null,
@@ -316,7 +459,6 @@ export class EmployeesService {
           userId: before.userId,
           departmentId: employeeData.departmentId !== undefined ? employeeData.departmentId : before.departmentId,
           positionId: employeeData.positionId !== undefined ? employeeData.positionId : before.positionId,
-          branchIds: [...new Set([employeeData.primaryBranchId ?? before.primaryBranchId, ...(branchIds ?? previousBranches.map((item) => item.branchId))].filter((branchId): branchId is string => Boolean(branchId)))],
         });
       }
 
@@ -324,6 +466,7 @@ export class EmployeesService {
         basicSalary: { before: before.basicSalary === null ? null : Number(before.basicSalary).toFixed(2), after: employeeData.basicSalary !== undefined ? (employeeData.basicSalary === null ? null : Number(employeeData.basicSalary).toFixed(2)) : before.basicSalary === null ? null : Number(before.basicSalary).toFixed(2) },
         spaBonusPercent: { before: before.spaBonusPercent === null ? null : Number(before.spaBonusPercent).toFixed(2), after: employeeData.spaBonusPercent !== undefined ? (employeeData.spaBonusPercent === null ? null : Number(employeeData.spaBonusPercent).toFixed(2)) : before.spaBonusPercent === null ? null : Number(before.spaBonusPercent).toFixed(2) },
         employmentType: { before: before.employmentType, after: employeeData.employmentType ?? before.employmentType },
+        probationDays: { before: before.probationDays, after: employeeData.probationDays ?? before.probationDays },
         jobTitle: { before: before.jobTitle, after: employeeData.jobTitle ?? before.jobTitle },
         positionId: { before: before.positionId, after: employeeData.positionId ?? before.positionId },
         departmentId: { before: before.departmentId, after: employeeData.departmentId ?? before.departmentId },
@@ -410,8 +553,9 @@ export class EmployeesService {
 
   private async employmentValue(tx: Prisma.TransactionClient, field: string, value: unknown): Promise<string | null> {
     if (value === null || value === undefined || value === '') return null;
-    if (field === 'basicSalary') return `${Number(value).toLocaleString('vi-VN')} ₫`;
+    if (field === 'basicSalary') return `${Number(value).toLocaleString('vi-VN')}đ`;
     if (field === 'spaBonusPercent') return `${value}%`;
+    if (field === 'probationDays') return `${value} ngày`;
     const lookup = async (ids: string[], kind: 'branch' | 'schedule' | 'position' | 'department') => {
       if (!ids.length) return [];
       if (kind === 'branch') return (await tx.branch.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } })).map((item) => item.name);
@@ -428,8 +572,23 @@ export class EmployeesService {
       return names.length ? names.join(', ') : null;
     }
     if (field === 'employmentType') return value === 'FULL_TIME' ? 'Toàn thời gian' : 'Bán thời gian';
-    if (field === 'workStatus') return ({ PROBATION: 'Thử việc', PERMANENT: 'Chính thức', CONTRACT: 'Hợp đồng', ON_LEAVE: 'Tạm nghỉ', INACTIVE: 'Ngừng làm việc' } as Record<string, string>)[String(value)] ?? String(value);
+    if (field === 'workStatus') return ({ PROBATION: 'Thử việc', PERMANENT: 'Chính thức', CONTRACT: 'Hợp đồng', ON_LEAVE: 'Tạm nghỉ', INACTIVE: 'Thôi việc', ABANDONED: 'Bỏ việc' } as Record<string, string>)[String(value)] ?? String(value);
     return String(value);
+  }
+
+  private employeeReadScopeWhere(access?: EmployeeReadScope): Prisma.EmployeeWhereInput | null {
+    if (!access || access.scope === 'ALL') return null;
+    if (access.scope === 'SELF') return { id: access.employeeId ?? '__no_employee__' };
+    if (access.scope === 'NONE' || !access.branchIds.length) return { id: '__no_employee__' };
+    return {
+      branchAssignments: {
+        some: {
+          branchId: { in: access.branchIds },
+          effectiveFrom: { lte: access.to },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: access.from } }],
+        },
+      },
+    };
   }
 
   async getDeletionEligibility(id: string) {
@@ -582,9 +741,13 @@ export class EmployeesService {
   async terminate(id: string, dto: TerminateEmployeeDto, ctx: AuditContext) {
     const before = await this.prisma.employee.findFirst({ where: { id, deletedAt: null } });
     if (!before) throw new NotFoundException('Không tìm thấy nhân viên');
-    if (before.workStatus === 'INACTIVE') throw new BadRequestException('Nhân viên đã ngừng làm việc');
+    if (before.workStatus === 'INACTIVE') throw new BadRequestException('Nhân viên đã thôi việc');
 
-    const terminationDate = new Date(dto.terminationDate);
+    const terminationDate = this.dateOnly(new Date(dto.terminationDate));
+    const today = workDateInTimeZone(new Date(), 'Asia/Ho_Chi_Minh');
+    const inactiveFrom = terminationDate < today ? terminationDate : today;
+    const lastActiveDate = new Date(inactiveFrom);
+    lastActiveDate.setUTCDate(lastActiveDate.getUTCDate() - 1);
     await this.prisma.$transaction(async (tx) => {
       await tx.employee.update({
         where: { id },
@@ -603,7 +766,7 @@ export class EmployeesService {
           reason: dto.terminationReason.trim(),
           decisionNumber: dto.decisionNumber?.trim() || null,
           changes: [
-            { field: 'workStatus', before: await this.employmentValue(tx, 'workStatus', before.workStatus), after: 'Ngừng làm việc' },
+            { field: 'workStatus', before: await this.employmentValue(tx, 'workStatus', before.workStatus), after: 'Thôi việc' },
           ],
           createdById: ctx.actorId,
         },
@@ -623,10 +786,19 @@ export class EmployeesService {
         where: { employeeId: id, OR: [{ effectiveTo: null }, { effectiveTo: { gt: terminationDate } }] },
         data: { effectiveTo: terminationDate },
       });
-      await tx.employeeWorkScheduleAssignment.updateMany({
-        where: { employeeId: id, OR: [{ effectiveTo: null }, { effectiveTo: { gt: terminationDate } }] },
-        data: { effectiveTo: terminationDate },
+      await tx.employeeWorkScheduleAssignment.deleteMany({
+        where: { employeeId: id, effectiveFrom: { gte: inactiveFrom } },
       });
+      await tx.employeeWorkScheduleAssignment.updateMany({
+        where: {
+          employeeId: id,
+          effectiveFrom: { lt: inactiveFrom },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: inactiveFrom } }],
+        },
+        data: { effectiveTo: lastActiveDate },
+      });
+      await tx.employeeDailySchedule.deleteMany({ where: { employeeId: id, workDate: { gte: inactiveFrom } } });
+      await tx.employeeScheduleOverride.deleteMany({ where: { employeeId: id, workDate: { gte: inactiveFrom } } });
       if (before.userId) {
         await this.ensureNotLastActiveSuperAdmin(tx, before.userId);
         await tx.user.update({ where: { id: before.userId }, data: { isActive: false } });
@@ -957,15 +1129,16 @@ export class EmployeesService {
     if (activeAdmins <= 1) throw new BadRequestException('Không thể vô hiệu hóa chủ cửa hàng đang hoạt động cuối cùng');
   }
 
-  /** Generate the next sequential employee number, e.g. EMP-0042. */
+  /** Generate the next sequential employee number, e.g. NV0001. */
   private async nextEmployeeNo() {
-    const last = await this.prisma.employee.findFirst({
-      where: { employeeNo: { startsWith: 'EMP-' } },
-      orderBy: { employeeNo: 'desc' },
+    const employees = await this.prisma.employee.findMany({
+      where: { employeeNo: { startsWith: 'NV' } },
       select: { employeeNo: true },
     });
-    const lastNum = last ? Number(last.employeeNo.replace('EMP-', '')) : 0;
-    const next = Number.isFinite(lastNum) ? lastNum + 1 : 1;
-    return `EMP-${String(next).padStart(4, '0')}`;
+    const lastNum = employees.reduce((max, { employeeNo }) => {
+      const match = /^NV(\d+)$/i.exec(employeeNo);
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0);
+    return `NV${String(lastNum + 1).padStart(4, '0')}`;
   }
 }

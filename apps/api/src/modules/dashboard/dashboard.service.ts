@@ -21,7 +21,7 @@ export class DashboardService {
       pendingLeaves,
     ] = await Promise.all([
       this.prisma.employee.count({ where: { deletedAt: null } }),
-      this.prisma.employee.count({ where: { deletedAt: null, workStatus: { in: ['PERMANENT', 'CONTRACT', 'PROBATION'] } } }),
+      this.prisma.employee.count({ where: { deletedAt: null, workStatus: { in: ['PERMANENT', 'PROBATION'] } } }),
       this.prisma.attendance.count({ where: { workDate, status: { in: ['PRESENT', 'LATE'] } } }),
       this.prisma.project.count({ where: { status: 'ACTIVE' } }),
       this.prisma.task.count({ where: { status: { not: 'DONE' } } }),

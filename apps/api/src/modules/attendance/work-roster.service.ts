@@ -31,7 +31,7 @@ export class WorkRosterService {
       where: {
         effectiveFrom: { lte: monthEnd },
         OR: [{ effectiveTo: null }, { effectiveTo: { gte: monthStart } }],
-        employee: { deletedAt: null, joinDate: { lte: monthEnd }, OR: [{ exitDate: null }, { exitDate: { gte: monthStart } }] },
+        employee: { deletedAt: null, workStatus: { notIn: ['INACTIVE', 'ABANDONED'] }, joinDate: { lte: monthEnd }, OR: [{ exitDate: null }, { exitDate: { gte: monthStart } }] },
       },
       include: {
         workSchedule: true,
@@ -100,12 +100,20 @@ export class WorkRosterService {
                 fullName: true,
                 employeeNo: true,
                 photoUrl: true,
+                employmentType: true,
+                joinDate: true,
+                exitDate: true,
+                workStatus: true,
                 user: { select: { avatarCropUrl: true } },
               },
             },
             segments: { include: { branch: { select: { id: true, code: true, name: true } } }, orderBy: { sequence: 'asc' } },
           },
-          orderBy: [{ workDate: 'asc' }, { employee: { fullName: 'asc' } }],
+          orderBy: [
+            { workDate: 'asc' },
+            { workSchedule: { displayOrder: 'asc' } },
+            { employee: { fullName: 'asc' } },
+          ],
         },
       },
     });
@@ -123,6 +131,10 @@ export class WorkRosterService {
         fullName: entry.employee.fullName,
         employeeNo: entry.employee.employeeNo,
         photoUrl: entry.employee.photoUrl ? photoUrls.get(entry.employee.photoUrl) ?? null : null,
+        employmentType: entry.employee.employmentType,
+        joinDate: entry.employee.joinDate,
+        exitDate: entry.employee.exitDate,
+        workStatus: entry.employee.workStatus,
         avatarUrl: entry.employee.user.avatarCropUrl
           ? photoUrls.get(entry.employee.user.avatarCropUrl) ?? null
           : entry.employee.photoUrl ? photoUrls.get(entry.employee.photoUrl) ?? null : null,

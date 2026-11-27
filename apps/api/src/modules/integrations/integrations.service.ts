@@ -261,7 +261,7 @@ export class IntegrationsService implements OnModuleInit, OnModuleDestroy {
     const key = await this.authenticate(rawKey, "employees:read");
     const take = this.pageSize(limit);
     const items = await this.prisma.employee.findMany({
-      where: { deletedAt: null, workStatus: { not: "INACTIVE" } },
+      where: { deletedAt: null, workStatus: { notIn: ["INACTIVE", "ABANDONED"] } },
       select: {
         id: true,
         employeeNo: true,

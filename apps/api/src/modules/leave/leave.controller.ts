@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { LeaveService } from './leave.service';
 import { CreateLeaveRequestDto, DecisionDto, LeaveQueryDto, PresignLeaveDocDto } from './dto/leave.dto';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
-import { CurrentUser, RequestUser, isPrivileged } from '../../common/decorators/current-user.decorator';
+import { branchIdsForPeriod, CurrentUser, RequestUser, isPrivileged, permissionScope } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('leave')
 @ApiBearerAuth()
@@ -36,8 +36,16 @@ export class LeaveController {
   @RequirePermissions('leave:read')
   @ApiOperation({ summary: 'List leave requests (employees see only their own)' })
   list(@Query() query: LeaveQueryDto, @CurrentUser() user: RequestUser) {
-    if (!isPrivileged(user, 'leave:approve')) {
+    const scope = permissionScope(user, 'leave:read');
+    if (scope === 'SELF') {
       return this.leave.list({ ...query, employeeId: user.employeeId ?? '__none__' });
+    }
+    if (scope === 'BRANCH') {
+      const from = new Date();
+      from.setDate(1);
+      from.setHours(0, 0, 0, 0);
+      const to = new Date(from.getFullYear(), from.getMonth() + 1, 0, 23, 59, 59, 999);
+      return this.leave.list(query, { branchIds: branchIdsForPeriod(user, from, to), from, to });
     }
     return this.leave.list(query);
   }
@@ -45,14 +53,32 @@ export class LeaveController {
   @Get('requests/inbox')
   @RequirePermissions('leave:approve')
   @ApiOperation({ summary: 'Approval inbox — requests awaiting a decision' })
-  inbox() {
+  inbox(@CurrentUser() user: RequestUser) {
+    const scope = permissionScope(user, 'leave:approve');
+    if (scope === 'SELF') return [];
+    if (scope === 'BRANCH') {
+      const from = new Date();
+      from.setDate(1);
+      from.setHours(0, 0, 0, 0);
+      const to = new Date(from.getFullYear(), from.getMonth() + 1, 0, 23, 59, 59, 999);
+      return this.leave.inbox({ branchIds: branchIdsForPeriod(user, from, to), from, to });
+    }
     return this.leave.inbox();
   }
 
   @Get('requests/:id')
   @RequirePermissions('leave:read')
   @ApiOperation({ summary: 'Leave request detail with approval timeline' })
-  getOne(@Param('id') id: string) {
+  getOne(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    const scope = permissionScope(user, 'leave:read');
+    if (scope === 'SELF') return this.leave.getById(id, { employeeId: user.employeeId ?? '__none__' });
+    if (scope === 'BRANCH') {
+      const from = new Date();
+      from.setDate(1);
+      from.setHours(0, 0, 0, 0);
+      const to = new Date(from.getFullYear(), from.getMonth() + 1, 0, 23, 59, 59, 999);
+      return this.leave.getById(id, { branchIds: branchIdsForPeriod(user, from, to), from, to });
+    }
     return this.leave.getById(id);
   }
 
@@ -70,7 +96,16 @@ export class LeaveController {
   @Post('requests/:id/decision')
   @RequirePermissions('leave:approve')
   @ApiOperation({ summary: 'Approve or reject the current approval step' })
-  decide(@Param('id') id: string, @Body() dto: DecisionDto, @CurrentUser() user: RequestUser) {
+  async decide(@Param('id') id: string, @Body() dto: DecisionDto, @CurrentUser() user: RequestUser) {
+    const scope = permissionScope(user, 'leave:approve');
+    if (scope === 'SELF') throw new ForbiddenException('Phạm vi quyền không cho phép phê duyệt yêu cầu của nhân viên khác');
+    if (scope === 'BRANCH') {
+      const from = new Date();
+      from.setDate(1);
+      from.setHours(0, 0, 0, 0);
+      const to = new Date(from.getFullYear(), from.getMonth() + 1, 0, 23, 59, 59, 999);
+      await this.leave.getById(id, { branchIds: branchIdsForPeriod(user, from, to), from, to });
+    }
     return this.leave.decide(id, dto, user.id, { actorId: user.id });
   }
 

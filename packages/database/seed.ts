@@ -9,44 +9,33 @@ import * as argon2 from "argon2";
 const prisma = new PrismaClient();
 
 // ---- Permission catalog (module:action) ----
-const MODULES = [
-  "dashboard",
-  "employee",
-  "attendance",
-  "leave",
-  "project",
-  "task",
-  "document",
-  "chat",
-  "notification",
-  "audit",
-  "report",
-  "rbac",
-  "user",
-  "settings",
-  "attendance-policy",
-  "branch",
-  "attendance-correction",
-  "payroll",
-  "integration",
-];
-const ACTIONS = ["create", "read", "update", "delete"];
-
-// Extra fine-grained permissions beyond CRUD
-const EXTRA_PERMISSIONS = [
-  "leave:approve",
-  "attendance:face:enroll",
-  "attendance:review",
-  "attendance:correction:approve",
-  "report:export",
-  "user:reset-password",
-  "user:manage-roles",
-];
+const MODULE_PERMISSIONS: Record<string, string[]> = {
+  dashboard: ["read"],
+  employee: ["create", "read", "update", "delete"],
+  candidate: ["create", "read", "update", "delete"],
+  attendance: ["create", "read", "update", "delete", "face:enroll", "review", "correction:approve"],
+  "attendance-policy": ["create", "read", "update", "delete"],
+  "attendance-correction": ["create", "read", "update", "delete"],
+  leave: ["create", "read", "approve"],
+  project: ["create", "read", "update", "delete"],
+  task: ["create", "read", "update", "delete"],
+  document: ["create", "read", "update", "delete"],
+  chat: ["create", "read"],
+  notification: ["read"],
+  audit: ["read"],
+  report: ["export"],
+  rbac: ["create", "read", "update", "delete"],
+  user: ["read", "update", "delete", "reset-password", "manage-roles"],
+  settings: ["read", "update"],
+  branch: ["create", "read", "update", "delete"],
+  payroll: ["read", "update"],
+  integration: ["create", "read", "update", "delete"],
+};
 
 function buildPermissionKeys(): { key: string; module: string }[] {
-  const keys = new Set<string>();
-  for (const m of MODULES) for (const a of ACTIONS) keys.add(`${m}:${a}`);
-  for (const k of EXTRA_PERMISSIONS) keys.add(k);
+  const keys = Object.entries(MODULE_PERMISSIONS).flatMap(([module, actions]) =>
+    actions.map((action) => `${module}:${action}`),
+  );
   return [...keys].map((key) => ({ key, module: key.split(":")[0] }));
 }
 
@@ -55,6 +44,7 @@ const ROLE_PERMISSIONS: Record<string, (key: string) => boolean> = {
   ADMIN: () => true, // all permissions
   HR: (k) =>
     k.startsWith("employee:") ||
+    k.startsWith("candidate:") ||
     k.startsWith("attendance:") ||
     k.startsWith("attendance-policy:") ||
     k.startsWith("branch:") ||
@@ -248,7 +238,7 @@ async function main() {
         primaryBranchId: demoHanoiBranch.id,
         fullName: "Nhân viên thử nghiệm 01",
         joinDate: new Date("2026-01-01T00:00:00.000Z"),
-        workStatus: "CONTRACT",
+        workStatus: "PERMANENT",
       },
     });
     const effectiveFrom = new Date("2026-01-01T00:00:00.000Z");
@@ -323,7 +313,7 @@ async function main() {
     const demoSupportEmployee = await prisma.employee.upsert({
       where: { employeeNo: "DEMO-002" },
       update: { userId: demoSupportUser.id, primaryBranchId: demoHcmBranch.id },
-      create: { userId: demoSupportUser.id, employeeNo: "DEMO-002", fullName: "Nhân viên hỗ trợ demo", primaryBranchId: demoHcmBranch.id, joinDate: new Date("2026-01-01T00:00:00.000Z"), workStatus: "CONTRACT" },
+      create: { userId: demoSupportUser.id, employeeNo: "DEMO-002", fullName: "Nhân viên hỗ trợ demo", primaryBranchId: demoHcmBranch.id, joinDate: new Date("2026-01-01T00:00:00.000Z"), workStatus: "PERMANENT" },
     });
     await prisma.employeeBranchAssignment.upsert({
       where: { employeeId_branchId_effectiveFrom: { employeeId: demoSupportEmployee.id, branchId: demoHcmBranch.id, effectiveFrom } },

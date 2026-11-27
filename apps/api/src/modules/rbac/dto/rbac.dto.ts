@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ArrayMinSize, IsArray, IsBoolean, IsOptional, IsString, Matches, MinLength, ValidateNested } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsOptional, IsString, Matches, MinLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateRoleDto {
@@ -28,10 +28,21 @@ export class UpdateRoleDto {
 }
 
 export class SetRolePermissionsDto {
-  @ApiProperty({ type: [String], example: ['employee:read', 'attendance:read'] })
+  @ApiProperty({ type: [Object] })
   @IsArray()
-  @IsString({ each: true })
-  permissionKeys!: string[];
+  @ValidateNested({ each: true })
+  @Type(() => RolePermissionScopeDto)
+  permissions!: RolePermissionScopeDto[];
+}
+
+export class RolePermissionScopeDto {
+  @ApiProperty()
+  @IsString()
+  key!: string;
+
+  @ApiProperty({ enum: ['ALL', 'BRANCH', 'SELF', 'NONE'] })
+  @IsIn(['ALL', 'BRANCH', 'SELF', 'NONE'])
+  scope!: 'ALL' | 'BRANCH' | 'SELF' | 'NONE';
 }
 
 export class AssignRoleDto {
@@ -59,11 +70,6 @@ export class RoleAssignmentRuleDto {
   @IsOptional()
   @IsString()
   positionId?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  branchId?: string;
 
   @ApiProperty({ required: false, default: true })
   @IsOptional()

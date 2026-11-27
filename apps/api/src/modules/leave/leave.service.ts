@@ -49,9 +49,15 @@ export class LeaveService {
     return this.storage.presignedUpload(key);
   }
 
-  async list(query: LeaveQueryDto) {
+  async list(query: LeaveQueryDto, branchScope?: { branchIds: string[]; from: Date; to: Date }) {
+    const branchFilter = branchScope
+      ? branchScope.branchIds.length
+        ? { employee: { branchAssignments: { some: { branchId: { in: branchScope.branchIds }, effectiveFrom: { lte: branchScope.to }, OR: [{ effectiveTo: null }, { effectiveTo: { gte: branchScope.from } }] } } } }
+        : { employeeId: '__no_employee__' }
+      : {};
     return this.prisma.leaveRequest.findMany({
       where: {
+        ...branchFilter,
         ...(query.employeeId ? { employeeId: query.employeeId } : {}),
         ...(query.status ? { status: query.status } : {}),
       },
@@ -61,16 +67,33 @@ export class LeaveService {
   }
 
   /** Approval inbox: requests still pending a decision. */
-  async inbox() {
+  async inbox(branchScope?: { branchIds: string[]; from: Date; to: Date }) {
+    const branchFilter = branchScope
+      ? branchScope.branchIds.length
+        ? { employee: { branchAssignments: { some: { branchId: { in: branchScope.branchIds }, effectiveFrom: { lte: branchScope.to }, OR: [{ effectiveTo: null }, { effectiveTo: { gte: branchScope.from } }] } } } }
+        : { employeeId: '__no_employee__' }
+      : {};
     return this.prisma.leaveRequest.findMany({
-      where: { status: 'PENDING' },
+      where: { status: 'PENDING', ...branchFilter },
       include: REQUEST_INCLUDE,
       orderBy: { createdAt: 'asc' },
     });
   }
 
-  async getById(id: string) {
-    const request = await this.prisma.leaveRequest.findUnique({ where: { id }, include: REQUEST_INCLUDE });
+  async getById(id: string, scope?: { employeeId?: string; branchIds?: string[]; from?: Date; to?: Date }) {
+    const branchFilter = scope?.branchIds
+      ? scope.branchIds.length
+        ? { employee: { branchAssignments: { some: { branchId: { in: scope.branchIds }, effectiveFrom: { lte: scope.to! }, OR: [{ effectiveTo: null }, { effectiveTo: { gte: scope.from! } }] } } } }
+        : { employeeId: '__no_employee__' }
+      : {};
+    const request = await this.prisma.leaveRequest.findFirst({
+      where: {
+        id,
+        ...(scope?.employeeId ? { employeeId: scope.employeeId } : {}),
+        ...branchFilter,
+      },
+      include: REQUEST_INCLUDE,
+    });
     if (!request) throw new NotFoundException('Leave request not found');
     return request;
   }

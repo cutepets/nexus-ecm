@@ -57,7 +57,7 @@ export default function ProyekPage() {
                 <span>{p._count.tasks} công việc · {p._count.members} thành viên</span>
                 {p.deadline && <span>{formatDate(p.deadline)}</span>}
               </div>
-              <div className="mt-1 text-xs text-ink-subtle">
+              <div className="mt-1 text-right text-xs text-ink-subtle">
                 Ngân sách: {formatCurrency(Number(p.budgetPlanned))}
               </div>
             </button>

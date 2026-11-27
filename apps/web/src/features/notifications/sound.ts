@@ -38,3 +38,10 @@ export function playNotificationTone(
   oscillator.start(start);
   oscillator.stop(start + duration + 0.03);
 }
+
+export function playNotificationAudio(dataUrl: string | null, volume: number) {
+  if (!dataUrl || volume <= 0 || typeof Audio === 'undefined') return;
+  const audio = new Audio(dataUrl);
+  audio.volume = Math.max(0, Math.min(1, volume / 100));
+  void audio.play().catch(() => undefined);
+}

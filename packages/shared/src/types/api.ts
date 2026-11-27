@@ -35,6 +35,7 @@ export interface AuthUser {
   avatarCropUrl?: string | null;
   roles: string[];
   permissions: string[];
+  permissionScopes?: Record<string, 'ALL' | 'BRANCH' | 'SELF'>;
   /** Linked Employee id, when this user is also an employee (self-service). */
   employeeId?: string | null;
   mustChangePassword?: boolean;

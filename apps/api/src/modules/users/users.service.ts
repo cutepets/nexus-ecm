@@ -13,7 +13,7 @@ import {
 
 const userWithRoles = {
   roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
-  employee: { select: { id: true } },
+  employee: { select: { id: true, branchAssignments: { select: { branchId: true, effectiveFrom: true, effectiveTo: true } } } },
 } as const;
 
 type UserWithRoles = Prisma.UserGetPayload<{ include: typeof userWithRoles }>;
@@ -37,6 +37,8 @@ export interface ResolvedUser {
   mustChangePassword: boolean;
   roles: string[];
   permissions: string[];
+  permissionScopes: Record<string, 'ALL' | 'BRANCH' | 'SELF'>;
+  branchAssignments: { branchId: string; effectiveFrom: Date; effectiveTo: Date | null }[];
   employeeId: string | null;
 }
 
@@ -329,15 +331,23 @@ export class UsersService {
   }
 
   /** Flattens nested role/permission relations into string arrays. */
-  private resolve(user: UserWithRoles): ResolvedUser {
+  private async resolve(user: UserWithRoles): Promise<ResolvedUser> {
     const roles = user.roles.map((ur) => ur.role.name);
-    const permissions = [
-      ...new Set<string>(
-        user.roles.flatMap((ur) =>
-          ur.role.permissions.map((rp) => rp.permission.key),
-        ),
-      ),
-    ];
+    const scopeRank = { SELF: 1, BRANCH: 2, ALL: 3 } as const;
+    const scopeMap = user.roles.flatMap((ur) => ur.role.permissions.map((rp) => [rp.permission.key, rp.scope] as const))
+      .reduce((merged, [key, scope]) => {
+        const current = merged.get(key);
+        if (!current || scopeRank[scope] > scopeRank[current]) merged.set(key, scope);
+        return merged;
+      }, new Map<string, 'ALL' | 'BRANCH' | 'SELF'>());
+    if (roles.includes('ADMIN')) {
+      const catalog = await this.prisma.permission.findMany({ select: { key: true } });
+      catalog.forEach(({ key }) => scopeMap.set(key, 'ALL'));
+    }
+    const permissionScopes = Object.fromEntries(
+      scopeMap,
+    );
+    const permissions = Object.keys(permissionScopes);
     return {
       id: user.id,
       email: user.email,
@@ -350,6 +360,8 @@ export class UsersService {
       mustChangePassword: user.mustChangePassword,
       roles,
       permissions,
+      permissionScopes,
+      branchAssignments: user.employee?.branchAssignments ?? [],
       employeeId: user.employee?.id ?? null,
     };
   }

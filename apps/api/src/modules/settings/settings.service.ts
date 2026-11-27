@@ -153,7 +153,7 @@ export class SettingsService {
 
   async getPayroll() {
     await this.companyRecord();
-    return this.prisma.companySetting.findUniqueOrThrow({
+    const setting = await this.prisma.companySetting.findUniqueOrThrow({
       where: { id: "default" },
       select: {
         payrollMode: true,
@@ -161,13 +161,13 @@ export class SettingsService {
         payrollCutoffDay: true,
         timesheetStartDay: true,
         timesheetEndDay: true,
-        roundingMinutes: true,
         latePenaltyPerMinute: true,
         missingPunchPenalty: true,
         overtimeTriggerMinutes: true,
         overtimeMultiplier: true,
       },
     });
+    return this.payrollSnapshot(setting);
   }
 
   async updatePayroll(dto: UpdatePayrollSettingDto, ctx: AuditContext) {
@@ -440,7 +440,6 @@ export class SettingsService {
     payrollCutoffDay: number;
     timesheetStartDay: number;
     timesheetEndDay: number;
-    roundingMinutes: number;
     latePenaltyPerMinute: unknown;
     missingPunchPenalty: unknown;
     overtimeTriggerMinutes: number;
@@ -452,9 +451,8 @@ export class SettingsService {
       payrollCutoffDay: setting.payrollCutoffDay,
       timesheetStartDay: setting.timesheetStartDay,
       timesheetEndDay: setting.timesheetEndDay,
-      roundingMinutes: setting.roundingMinutes,
-      latePenaltyPerMinute: setting.latePenaltyPerMinute,
-      missingPunchPenalty: setting.missingPunchPenalty,
+      latePenaltyPerMinute: Number(setting.latePenaltyPerMinute),
+      missingPunchPenalty: Number(setting.missingPunchPenalty),
       overtimeTriggerMinutes: setting.overtimeTriggerMinutes,
       overtimeMultiplier: setting.overtimeMultiplier,
     };

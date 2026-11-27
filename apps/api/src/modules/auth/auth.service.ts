@@ -102,6 +102,7 @@ export class AuthService {
       email: user.email,
       roles: user.roles,
       permissions: user.permissions,
+      permissionScopes: user.permissionScopes,
       employeeId: user.employeeId,
     };
 
@@ -149,6 +150,7 @@ export class AuthService {
       avatarCropUrl: user.avatarCropUrl,
       roles: user.roles,
       permissions: user.permissions,
+      permissionScopes: user.permissionScopes,
       employeeId: user.employeeId,
       mustChangePassword: user.mustChangePassword,
     };

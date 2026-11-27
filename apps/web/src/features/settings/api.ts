@@ -13,7 +13,7 @@ export interface CompanySetting {
   currency: "VND" | "USD";
   weekStartsOn: number;
   requireGps: boolean;
-  livenessMode: "NONE" | "BLINK" | "TURN_HEAD" | "SMILE" | "RANDOM";
+  livenessMode: "NONE" | "BLINK" | "TURN_HEAD" | "SMILE" | "NOD" | "RANDOM";
   faceDuplicateThreshold: number;
   auditRetentionDays: number;
   rosterAutoGenerateEnabled: boolean;
@@ -74,7 +74,6 @@ export interface PayrollSetting {
   payrollCutoffDay: number;
   timesheetStartDay: number;
   timesheetEndDay: number;
-  roundingMinutes: number;
   latePenaltyPerMinute: number;
   missingPunchPenalty: number;
   overtimeTriggerMinutes: number;

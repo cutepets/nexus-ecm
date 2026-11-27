@@ -37,7 +37,7 @@ import {
 } from "../../common/utils/company-time";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
-type LivenessPolicy = "NONE" | "BLINK" | "TURN_HEAD" | "RANDOM" | "SMILE";
+type LivenessPolicy = "NONE" | "BLINK" | "TURN_HEAD" | "RANDOM" | "SMILE" | "NOD";
 type IssuedLivenessChallenge = Exclude<
   CheckDto["livenessChallenge"],
   "NONE" | undefined
@@ -72,6 +72,12 @@ type AttendanceApprovalUpdate = {
   overtimeMinutes?: number;
   manualLatePenalty?: number;
   manualReward?: number;
+  manualScheduleTimes?: {
+    startTime: string;
+    endTime: string;
+    secondStartTime: string;
+    secondEndTime: string;
+  };
 };
 
 @Injectable()
@@ -1218,13 +1224,34 @@ export class AttendanceService {
     }
     const previous = (before.approvalUpdate ??
       {}) as unknown as AttendanceApprovalUpdate;
+    if (dto.workScheduleId && dto.manualScheduleTimes)
+      throw new BadRequestException("Chọn ca làm hoặc ca thủ công");
+    if (dto.manualScheduleTimes) {
+      const toMinutes = (value: string) => {
+        const [hours, minutes] = value.split(":").map(Number);
+        return hours * 60 + minutes;
+      };
+      if (
+        toMinutes(dto.manualScheduleTimes.endTime) <=
+          toMinutes(dto.manualScheduleTimes.startTime) ||
+        toMinutes(dto.manualScheduleTimes.secondEndTime) <=
+          toMinutes(dto.manualScheduleTimes.secondStartTime) ||
+        toMinutes(dto.manualScheduleTimes.secondStartTime) <
+          toMinutes(dto.manualScheduleTimes.endTime)
+      )
+        throw new BadRequestException("Giờ ca thủ công không hợp lệ");
+    }
     const adjustment: AttendanceApprovalUpdate = {
       ...previous,
       ...(dto.latePenalty !== undefined
         ? { manualLatePenalty: dto.latePenalty }
         : {}),
       ...(dto.reward !== undefined ? { manualReward: dto.reward } : {}),
+      ...(dto.manualScheduleTimes
+        ? { manualScheduleTimes: dto.manualScheduleTimes }
+        : {}),
     };
+    if (dto.workScheduleId) delete adjustment.manualScheduleTimes;
     const record = await this.prisma.attendance.update({
       where: { id },
       data: {
@@ -1233,6 +1260,9 @@ export class AttendanceService {
               manualWorkScheduleId: schedule.id,
               manualWorkScheduleName: schedule.name,
             }
+          : {}),
+        ...(dto.manualScheduleTimes
+          ? { manualWorkScheduleId: null, manualWorkScheduleName: "Thủ công" }
           : {}),
         approvalUpdate: adjustment as Prisma.InputJsonValue,
       },
@@ -1683,7 +1713,8 @@ export class AttendanceService {
       BLINK: ["BLINK"],
       TURN_HEAD: ["TURN_LEFT", "TURN_RIGHT"],
       SMILE: ["SMILE"],
-      RANDOM: ["BLINK", "TURN_LEFT", "TURN_RIGHT", "SMILE"],
+      NOD: ["NOD"],
+      RANDOM: ["BLINK", "TURN_LEFT", "TURN_RIGHT", "SMILE", "NOD"],
     };
     const allowed = choices[policy];
     const challenge = allowed[Math.floor(Math.random() * allowed.length)];
@@ -1701,26 +1732,45 @@ export class AttendanceService {
     query: AttendanceQueryDto,
     scopeEmployeeId?: string | null,
     includeAuditPhotos = false,
+    branchIds?: string[],
+    branchPeriod?: { from: Date; to: Date },
   ) {
     const where: Prisma.AttendanceWhereInput = {};
     // Non-privileged users are locked to their own records.
     if (scopeEmployeeId) where.employeeId = scopeEmployeeId;
     else if (query.employeeId) where.employeeId = query.employeeId;
+    if (branchIds) {
+      if (!branchIds.length) return [];
+      const from = branchPeriod?.from ?? new Date();
+      const to = branchPeriod?.to ?? new Date();
+      where.employee = {
+        branchAssignments: {
+          some: {
+            branchId: { in: branchIds },
+            effectiveFrom: { lte: to },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: from } }],
+          },
+        },
+      };
+    }
     if (query.branchId) {
       const locations = await this.prisma.branchLocation.findMany({
         where: { branchId: query.branchId },
         select: { id: true },
       });
       const locationIds = locations.map((location) => location.id);
-      if (!locationIds.length) return [];
-      where.OR = [
-        { checkInLocationId: { in: locationIds } },
-        { checkOutLocationId: { in: locationIds } },
-        { sessions: { some: { checkInLocationId: { in: locationIds } } } },
-        { sessions: { some: { checkOutLocationId: { in: locationIds } } } },
-      ];
+      if (locationIds.length) {
+        where.OR = [
+          { checkInLocationId: { in: locationIds } },
+          { checkOutLocationId: { in: locationIds } },
+          { sessions: { some: { checkInLocationId: { in: locationIds } } } },
+          { sessions: { some: { checkOutLocationId: { in: locationIds } } } },
+        ];
+      } else {
+        where.id = "__no_attendance_location__";
+      }
     }
-    if (query.status)
+    if (query.status && query.status !== "NOT_ARRIVED" && query.status !== "ABSENT")
       where.status = query.status as Prisma.AttendanceWhereInput["status"];
     if (query.approvalStatus) where.approvalStatus = query.approvalStatus;
     if (query.date) {
@@ -1816,7 +1866,7 @@ export class AttendanceService {
       select: { timezone: true, latePenaltyPerMinute: true },
     });
     const timezone = setting?.timezone ?? "Asia/Ho_Chi_Minh";
-    return Promise.all(
+    const attendanceRows = await Promise.all(
       records.map(async (record) => {
         const assignment = assignments.find(
           (item) =>
@@ -1943,6 +1993,7 @@ export class AttendanceService {
             record.manualWorkScheduleName ??
             schedule?.name ??
             null,
+          manualScheduleTimes: approvalUpdate.manualScheduleTimes ?? null,
           approvalDisplayStatus:
             correctionStatusByAttendance.get(record.id) ??
             (record.approvalRequestNote
@@ -1951,6 +2002,95 @@ export class AttendanceService {
         };
       }),
     );
+
+    const today = workDateInTimeZone(new Date(), timezone);
+    const rangeStart = query.date
+      ? workDateFromIsoDate(query.date)
+      : query.from
+        ? workDateFromIsoDate(query.from)
+        : monthStartInTimeZone(today, timezone);
+    const requestedEnd = query.date
+      ? workDateFromIsoDate(query.date)
+      : query.to
+        ? workDateFromIsoDate(query.to)
+        : today;
+    const rangeEnd = requestedEnd > today ? today : requestedEnd;
+    const scheduledRows: Array<{
+      id: string;
+      workDate: Date;
+      checkInAt: null;
+      checkOutAt: null;
+      status: string;
+      livenessPassed: false;
+      approvalStatus: "APPROVED";
+      employee: { id: string; fullName: string; employeeNo: string };
+      sessions: [];
+      workScheduleName: string;
+      workScheduleTimes: string[];
+      attendanceBranchName: string;
+      isScheduledPlaceholder: true;
+    }> = [];
+    if (rangeStart <= rangeEnd && !query.approvalStatus) {
+      const rosterMonths = new Set<string>();
+      for (let cursor = new Date(rangeStart); cursor <= rangeEnd; cursor.setUTCMonth(cursor.getUTCMonth() + 1, 1)) {
+        rosterMonths.add(`${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`);
+      }
+      const rosters = await Promise.all(
+        [...rosterMonths].map((month) => this.workRoster.list(month, null, true)),
+      );
+      const occupancyRecords = query.status === "ABSENT"
+        ? await this.prisma.attendance.findMany({
+            where: { ...where, status: undefined },
+            select: { employeeId: true, workDate: true },
+          })
+        : records;
+      const recordedShifts = new Set(occupancyRecords.map((record) => `${record.employeeId}:${isoDateInTimeZone(record.workDate, timezone)}`));
+      const fromKey = isoDateInTimeZone(rangeStart, timezone);
+      const toKey = isoDateInTimeZone(rangeEnd, timezone);
+      for (const roster of rosters) {
+        for (const entry of roster.entries) {
+          const workDate = isoDateInTimeZone(new Date(entry.workDate), timezone);
+          if (workDate < fromKey || workDate > toKey) continue;
+          if (scopeEmployeeId === "__none__") continue;
+          if (scopeEmployeeId && entry.employee.id !== scopeEmployeeId) continue;
+          if (query.employeeId && entry.employee.id !== query.employeeId) continue;
+          if (recordedShifts.has(`${entry.employee.id}:${workDate}`)) continue;
+          if (branchIds && !entry.segments.some((segment) => branchIds.includes(segment.branch.id))) continue;
+          if (query.branchId && !entry.segments.some((segment) => segment.branch.id === query.branchId)) continue;
+          const status = workDate < isoDateInTimeZone(today, timezone) ? "ABSENT" : "NOT_ARRIVED";
+          if (query.status && query.status !== status) continue;
+          scheduledRows.push({
+            id: `scheduled:${entry.employee.id}:${workDate}`,
+            workDate: new Date(entry.workDate),
+            checkInAt: null,
+            checkOutAt: null,
+            status,
+            livenessPassed: false,
+            approvalStatus: "APPROVED",
+            employee: {
+              id: entry.employee.id,
+              fullName: entry.employee.fullName,
+              employeeNo: entry.employee.employeeNo,
+            },
+            sessions: [],
+            workScheduleName: entry.scheduleName,
+            workScheduleTimes: entry.segments.map((segment) => `${segment.startTime}–${segment.endTime}`),
+            attendanceBranchName: entry.segments.map((segment) => segment.branch.name).join(", "),
+            isScheduledPlaceholder: true,
+          });
+        }
+      }
+    }
+
+    const filteredAttendanceRows = query.status
+      ? attendanceRows.filter((record) => record.status === query.status)
+      : attendanceRows;
+    return [...filteredAttendanceRows, ...scheduledRows].sort((a, b) => {
+      const dateOrder = new Date(b.workDate).getTime() - new Date(a.workDate).getTime();
+      if (dateOrder) return dateOrder;
+      return (b.checkInAt ? new Date(b.checkInAt).getTime() : 0) -
+        (a.checkInAt ? new Date(a.checkInAt).getTime() : 0);
+    });
   }
 
   /** Detailed attendance audit view. Photo URLs are short-lived and never expose object keys. */
@@ -2064,6 +2204,7 @@ export class AttendanceService {
           ? [{ type: record.exceptionType, decision: "PENDING" as const }]
           : []),
       manualReward: approvalUpdate.manualReward ?? null,
+      manualScheduleTimes: approvalUpdate.manualScheduleTimes ?? null,
       ...(approvalUpdate.manualLatePenalty !== undefined
         ? { latePenalty: approvalUpdate.manualLatePenalty }
         : {}),
@@ -2319,9 +2460,11 @@ export class AttendanceService {
   }
 
   private normalizedLivenessPolicy(policy?: string | null): LivenessPolicy {
-    return policy === "BLINK" ||
+    return policy === "NONE" ||
+      policy === "BLINK" ||
       policy === "TURN_HEAD" ||
       policy === "SMILE" ||
+      policy === "NOD" ||
       policy === "RANDOM"
       ? policy
       : "RANDOM";
@@ -2384,6 +2527,7 @@ export class AttendanceService {
       policy === "RANDOM" ||
       (policy === "SMILE" && tokenChallenge === "SMILE") ||
       (policy === "BLINK" && tokenChallenge === "BLINK") ||
+      (policy === "NOD" && tokenChallenge === "NOD") ||
       (policy === "TURN_HEAD" &&
         ["TURN_LEFT", "TURN_RIGHT"].includes(tokenChallenge));
     if (!isAllowed)

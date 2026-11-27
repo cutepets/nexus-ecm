@@ -1,20 +1,14 @@
 # Nexus ECM — working guide
 
-Active development workspace. Source code and Prisma migrations are authoritative.
+Source code and Prisma migrations are authoritative. Start with [`docs/system-map.md`](docs/system-map.md) for architecture and local startup; use [`docs/DEV-NEXT.md`](docs/DEV-NEXT.md) for pilot work still open.
 
-## Start here
+## Change safely
 
-- `docs/system-map.md`: architecture and local startup.
-- `docs/DEV-NEXT.md`: open pilot inputs and acceptance evidence.
-- `README.md`: product overview.
-
-## Change rules
-
-- Before editing a function, class, or method, run GitNexus upstream impact analysis. Report direct callers, affected flows, and risk; tell the user before proceeding on HIGH/CRITICAL risk.
-- Use GitNexus query/context to navigate unfamiliar flows. Run change detection before committing; re-index after major changes. Preserve embeddings when re-indexing if any exist.
+- For unfamiliar code, use GitNexus query/context. Before editing a function, class, or method, run upstream impact analysis and report direct callers, affected flows, and risk. Stop and warn before HIGH/CRITICAL changes.
 - Never rewrite an applied migration. Back up production data before migrations.
-- Preserve existing local changes. Use synthetic demo data only; never put real employee biometrics, credentials, or personal data in seeds/tests.
+- Use synthetic demo data only; never add real employee biometrics, credentials, or personal data to seeds, tests, or docs.
+- Before committing, run GitNexus change detection. After major code changes, refresh the index and preserve embeddings if `.gitnexus/meta.json` reports any.
 
-## Current state
+## Local development
 
-Core HR, attendance and rosters, leave, projects/tasks, documents, chat, payroll, settings, and integrations exist in the codebase. Development is ongoing; module presence is not proof of production readiness. Pilot setup and evidence in `docs/DEV-NEXT.md` remain outstanding.
+Use Node 20+, pnpm 9+, `.env`, and the Docker services. Start-up steps and URLs are in `docs/system-map.md`. Pilot inputs and acceptance evidence are in `docs/DEV-NEXT.md`.

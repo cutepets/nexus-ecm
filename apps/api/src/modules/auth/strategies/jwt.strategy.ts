@@ -9,6 +9,7 @@ export interface AccessTokenPayload {
   email: string;
   roles: string[];
   permissions: string[];
+  permissionScopes?: Record<string, 'ALL' | 'BRANCH' | 'SELF'>;
   employeeId?: string | null;
 }
 
@@ -34,6 +35,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       email: user.email,
       roles: user.roles,
       permissions: user.permissions,
+      permissionScopes: user.permissionScopes,
+      branchAssignments: user.branchAssignments,
       employeeId: user.employeeId,
     };
   }

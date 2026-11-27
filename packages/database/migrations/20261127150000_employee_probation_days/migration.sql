@@ -1,0 +1,1 @@
+ALTER TABLE "employees" ADD COLUMN "probationDays" INTEGER NOT NULL DEFAULT 20;

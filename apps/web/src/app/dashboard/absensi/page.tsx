@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAuthStore } from "@/stores/auth-store";
+import { formatCurrency } from "@/lib/utils";
 import { CheckScanner } from "@/features/attendance/check-scanner";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -26,6 +27,7 @@ import { useBranches } from "@/features/settings/api";
 import { EnrollScanner } from "@/features/attendance/enroll-scanner";
 import {
   useAttendanceHistory,
+  useAttendanceList,
   useAttendanceDetail,
   useAttendanceApprovalHistory,
   useCreateAttendanceApprovalRequest,
@@ -132,9 +134,7 @@ function attendanceDateTimeToIso(workDate: string, time: string) {
 }
 
 function formatMoney(value?: number | null) {
-  return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(
-    value ?? 0,
-  );
+  return formatCurrency(value ?? 0);
 }
 
 function moneyInput(value: string) {
@@ -306,10 +306,13 @@ const RECORD_COLUMNS: ColumnDef<AttendanceRecord>[] = [
   {
     id: "schedule",
     header: "Ca làm",
-    size: 90,
+    size: 130,
     cell: ({ row }) => (
       <div className="grid gap-1">
         <span>{row.original.workScheduleName ?? "—"}</span>
+        {row.original.workScheduleTimes?.length ? (
+          <span className="text-xs text-ink-muted">{row.original.workScheduleTimes.join(" · ")}</span>
+        ) : null}
         {row.original.exceptionType === "WRONG_SCHEDULE" && (
           <span className="text-xs font-medium text-amber-700">Sai lịch</span>
         )}
@@ -336,7 +339,7 @@ const RECORD_COLUMNS: ColumnDef<AttendanceRecord>[] = [
     cell: ({ row }) =>
       row.original.latePenalty == null
         ? "—"
-        : `${new Intl.NumberFormat("vi-VN").format(row.original.latePenalty)} ₫`,
+        : <div className="text-right">{formatCurrency(row.original.latePenalty)}</div>,
   },
   {
     accessorKey: "matchScore",
@@ -351,7 +354,9 @@ const RECORD_COLUMNS: ColumnDef<AttendanceRecord>[] = [
     accessorKey: "status",
     header: "Trạng thái",
     size: 90,
-    cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    cell: ({ row }) => row.original.status === "NOT_ARRIVED"
+      ? <Badge tone="neutral">Chưa đến</Badge>
+      : <StatusBadge status={row.original.status} />,
   },
   {
     accessorKey: "approvalDisplayStatus",
@@ -1018,6 +1023,12 @@ function AttendanceDayDialog({
   const { data: schedules } = useManualAttendanceWorkSchedules(manageMode);
   const [editingRecord, setEditingRecord] = useState(false);
   const [scheduleId, setScheduleId] = useState("");
+  const [manualScheduleTimes, setManualScheduleTimes] = useState({
+    startTime: "",
+    endTime: "",
+    secondStartTime: "",
+    secondEndTime: "",
+  });
   const [latePenalty, setLatePenalty] = useState("");
   const [reward, setReward] = useState("");
   const [sessionEdits, setSessionEdits] = useState<
@@ -1036,6 +1047,13 @@ function AttendanceDayDialog({
     setEditingRecord(false);
     setSessionEdits({});
     setNewSession(null);
+    setScheduleId("");
+    setManualScheduleTimes(incomingRecord?.manualScheduleTimes ?? {
+      startTime: "",
+      endTime: "",
+      secondStartTime: "",
+      secondEndTime: "",
+    });
   }, [incomingRecord]);
   const cancelEdit = () => {
     setEditingRecord(false);
@@ -1044,14 +1062,28 @@ function AttendanceDayDialog({
     setReward("");
     setSessionEdits({});
     setNewSession(null);
+    setManualScheduleTimes({
+      startTime: "",
+      endTime: "",
+      secondStartTime: "",
+      secondEndTime: "",
+    });
   };
   const saveRecord = () => {
     if (!record) return;
+    if (
+      scheduleId === "MANUAL" &&
+      Object.values(manualScheduleTimes).some((value) => !value)
+    ) return;
     if (scheduleId || latePenalty || reward)
       updateAdjustment.mutate(
         {
           id: record.id,
-          ...(scheduleId ? { workScheduleId: scheduleId } : {}),
+          ...(scheduleId === "MANUAL"
+            ? { manualScheduleTimes }
+            : scheduleId
+              ? { workScheduleId: scheduleId }
+              : {}),
           ...(latePenalty ? { latePenalty: moneyValue(latePenalty) } : {}),
           ...(reward ? { reward: moneyValue(reward) } : {}),
         },
@@ -1168,18 +1200,18 @@ function AttendanceDayDialog({
                 </div>
                 <div>
                   <dt className="font-bold text-ink-muted">Phạt</dt>
-                  <dd className="mt-1 font-medium">
+                  <dd className="mt-1 text-right font-medium">
                     {record.latePenalty == null
                       ? "—"
-                      : `${formatMoney(record.latePenalty)} ₫`}
+                      : formatMoney(record.latePenalty)}
                   </dd>
                 </div>
                 <div>
                   <dt className="font-bold text-ink-muted">Thưởng</dt>
-                  <dd className="mt-1 font-medium">
+                  <dd className="mt-1 text-right font-medium">
                     {record.manualReward == null
                       ? "—"
-                      : `${formatMoney(record.manualReward)} ₫`}
+                      : formatMoney(record.manualReward)}
                   </dd>
                 </div>
               </dl>
@@ -1193,7 +1225,13 @@ function AttendanceDayDialog({
                       type="button"
                       size="sm"
                       variant="secondary"
-                      onClick={() => setEditingRecord(true)}
+                      onClick={() => {
+                        if (record.manualScheduleTimes) {
+                          setScheduleId("MANUAL");
+                          setManualScheduleTimes(record.manualScheduleTimes);
+                        }
+                        setEditingRecord(true);
+                      }}
                     >
                       <Pencil />
                       Sửa
@@ -1224,6 +1262,7 @@ function AttendanceDayDialog({
                           <option value="">
                             Giữ ca hiện tại ({record.workScheduleName ?? "—"})
                           </option>
+                          <option value="MANUAL">Thủ công</option>
                           {schedules?.map((schedule) => (
                             <option key={schedule.id} value={schedule.id}>
                               {schedule.name} · {schedule.startTime}–
@@ -1232,10 +1271,36 @@ function AttendanceDayDialog({
                           ))}
                         </Select>
                       </label>
+                      {scheduleId === "MANUAL" ? (
+                        <div className="grid gap-2 sm:col-span-3 sm:grid-cols-4">
+                          {([
+                            ["startTime", "Giờ bắt đầu ca 1"],
+                            ["endTime", "Giờ kết thúc ca 1"],
+                            ["secondStartTime", "Giờ bắt đầu ca 2"],
+                            ["secondEndTime", "Giờ kết thúc ca 2"],
+                          ] as const).map(([key, label]) => (
+                            <label key={key} className="text-sm font-medium">
+                              {label}
+                              <Input
+                                className="mt-1"
+                                type="time"
+                                required
+                                value={manualScheduleTimes[key]}
+                                onChange={(event) =>
+                                  setManualScheduleTimes((current) => ({
+                                    ...current,
+                                    [key]: event.target.value,
+                                  }))
+                                }
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      ) : null}
                       <label className="text-sm font-medium">
-                        Phạt (₫)
+                        Phạt (đ)
                         <Input
-                          className="mt-1"
+                          className="mt-1 text-right"
                           type="text"
                           inputMode="numeric"
                           placeholder={formatMoney(record.latePenalty)}
@@ -1246,9 +1311,9 @@ function AttendanceDayDialog({
                         />
                       </label>
                       <label className="text-sm font-medium">
-                        Thưởng (₫)
+                        Thưởng (đ)
                         <Input
-                          className="mt-1"
+                          className="mt-1 text-right"
                           type="text"
                           inputMode="numeric"
                           placeholder={formatMoney(record.manualReward)}
@@ -1412,7 +1477,9 @@ function AttendanceDayDialog({
                         disabled={
                           updateAdjustment.isPending ||
                           updateSession.isPending ||
-                          createSession.isPending
+                          createSession.isPending ||
+                          (scheduleId === "MANUAL" &&
+                            Object.values(manualScheduleTimes).some((value) => !value))
                         }
                         onClick={saveRecord}
                       >
@@ -1521,18 +1588,18 @@ function AttendanceDayDialog({
               </div>
               <div>
                 <dt className="font-bold text-ink-muted">Phạt</dt>
-                <dd className="mt-1 font-medium">
+                <dd className="mt-1 text-right font-medium">
                   {record.latePenalty == null
                     ? "—"
-                    : `${formatMoney(record.latePenalty)} ₫`}
+                    : formatMoney(record.latePenalty)}
                 </dd>
               </div>
               <div>
                 <dt className="font-bold text-ink-muted">Thưởng</dt>
-                <dd className="mt-1 font-medium">
+                <dd className="mt-1 text-right font-medium">
                   {record.manualReward == null
                     ? "—"
-                    : `${formatMoney(record.manualReward)} ₫`}
+                    : formatMoney(record.manualReward)}
                 </dd>
               </div>
             </dl>
@@ -1583,9 +1650,9 @@ function AttendanceDayDialog({
                         </Select>
                       </label>
                       <label className="text-sm font-medium">
-                        Phạt (₫)
+                        Phạt (đ)
                         <Input
-                          className="mt-1"
+                          className="mt-1 text-right"
                           type="text"
                           inputMode="numeric"
                           placeholder={formatMoney(record.latePenalty)}
@@ -1596,9 +1663,9 @@ function AttendanceDayDialog({
                         />
                       </label>
                       <label className="text-sm font-medium">
-                        Thưởng (₫)
+                        Thưởng (đ)
                         <Input
-                          className="mt-1"
+                          className="mt-1 text-right"
                           type="text"
                           inputMode="numeric"
                           placeholder={formatMoney(record.manualReward)}
@@ -2345,6 +2412,7 @@ function CompanyView() {
               <option value="">Tất cả trạng thái</option>
               <option value="PRESENT">Có mặt</option>
               <option value="LATE">Đi muộn</option>
+              <option value="NOT_ARRIVED">Chưa đến</option>
               <option value="ABSENT">Vắng mặt</option>
               <option value="LEAVE">Nghỉ phép</option>
               <option value="PERMIT">Nghỉ có phép</option>
@@ -2375,6 +2443,7 @@ function CompanyView() {
           searchable={false}
           emptyTitle="Chưa có bản ghi chấm công"
           onRowClick={(record) => {
+            if (record.isScheduledPlaceholder) return;
             setDialogReviewMode(false);
             setDialogRecord(record);
           }}
@@ -2433,8 +2502,12 @@ function PersonalView() {
   const [punchOpen, setPunchOpen] = useState(false);
   const [faceEnrollOpen, setFaceEnrollOpen] = useState(false);
   useEffect(() => { if (me && !me.enrolled) setFaceEnrollOpen(true); }, [me?.enrolled]);
+  const todayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
+  const { data: todayRecords } = useAttendanceList(todayKey, Boolean(employeeId));
+  const todayRecord = todayRecords?.[0];
   const today = me?.today;
-  const sessionCount = today?.sessions.length ?? 0;
+  const attendanceStatus = todayRecord?.status ?? today?.status;
+  const sessionCount = todayRecord?.sessions?.length ?? today?.sessions.length ?? 0;
 
   return (
     <div className="space-y-6">
@@ -2444,10 +2517,12 @@ function PersonalView() {
         <div>
           <div className="text-sm text-ink-muted">Trạng thái hôm nay</div>
           <div className="mt-1 flex items-center gap-2">
-            {today ? (
+            {attendanceStatus ? (
               <>
-                <StatusBadge status={today.status} />
-                <ApprovalStatus status={today.approvalDisplayStatus} />
+                {attendanceStatus === "NOT_ARRIVED"
+                  ? <Badge tone="neutral">Chưa đến</Badge>
+                  : <StatusBadge status={attendanceStatus} />}
+                <ApprovalStatus status={today?.approvalDisplayStatus} />
               </>
             ) : (
               <Badge tone="neutral">Chưa chấm vào</Badge>
@@ -2489,7 +2564,9 @@ function PersonalView() {
           minTableWidth={0}
           tableId="attendance-personal-history"
           emptyTitle={"Ch\u01b0a c\u00f3 l\u1ecbch s\u1eed ch\u1ea5m c\u00f4ng"}
-          onRowClick={setDetailRecord}
+          onRowClick={(record) => {
+            if (!record.isScheduledPlaceholder) setDetailRecord(record);
+          }}
           toolbarContent={
             <>
 
@@ -2524,6 +2601,7 @@ function PersonalView() {
               <option value="">Tất cả trạng thái</option>
               <option value="PRESENT">Có mặt</option>
               <option value="LATE">Đi muộn</option>
+              <option value="NOT_ARRIVED">Chưa đến</option>
               <option value="ABSENT">Vắng mặt</option>
               <option value="LEAVE">Nghỉ phép</option>
               <option value="PERMIT">Nghỉ có phép</option>

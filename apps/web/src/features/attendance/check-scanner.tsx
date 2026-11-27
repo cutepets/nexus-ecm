@@ -35,6 +35,7 @@ import {
 import { api } from "@/lib/api-client";
 import { useEmployees } from "@/features/employees/api";
 import { useAuthStore } from "@/stores/auth-store";
+import { formatCurrency } from "@/lib/utils";
 import { useBranches } from "@/features/settings/api";
 import {
   Dialog,
@@ -335,13 +336,14 @@ export function CheckScanner({
         try {
           const issued = await livenessChallengeRequest.mutateAsync();
           const challengeMap: Record<
-            "BLINK" | "TURN_LEFT" | "TURN_RIGHT" | "SMILE",
+            "BLINK" | "TURN_LEFT" | "TURN_RIGHT" | "SMILE" | "NOD",
             LivenessChallenge
           > = {
             BLINK: "blink",
             TURN_LEFT: "turnLeft",
             TURN_RIGHT: "turnRight",
             SMILE: "smile",
+            NOD: "nod",
           };
           activeChallenge = challengeMap[issued.challenge];
           livenessTokenRef.current = issued.token;
@@ -631,7 +633,7 @@ export function CheckScanner({
     const latePenalty =
       checkedRecord.latePenalty == null
         ? null
-        : `${new Intl.NumberFormat("vi-VN").format(checkedRecord.latePenalty)} ₫`;
+        : formatCurrency(checkedRecord.latePenalty);
     return (
       <section className="mx-auto max-w-md rounded-card border border-emerald-200 bg-emerald-50 p-6 text-center shadow-card">
         <CheckCircle2 className="mx-auto size-16 text-emerald-600" />
@@ -693,7 +695,7 @@ export function CheckScanner({
           {latePenalty && (
             <div className="flex justify-between gap-4 px-4 py-3">
               <dt className="text-ink-muted">Phạt đi muộn</dt>
-              <dd className="font-medium">{latePenalty}</dd>
+              <dd className="text-right font-medium">{latePenalty}</dd>
             </div>
           )}
         </dl>

@@ -10,7 +10,12 @@ type Tone = NonNullable<BadgeProps["tone"]>;
 const STATUS_TONE: Record<string, Tone> = {
   // generic
   ACTIVE: "mint",
-  INACTIVE: "neutral",
+  INACTIVE: "red",
+  PROBATION: "amber",
+  PERMANENT: "mint",
+  ON_LEAVE: "cyan",
+  UPCOMING_EXIT: "red",
+  ABANDONED: "purple",
   PENDING: "amber",
   APPROVED: "mint",
   REJECTED: "red",
@@ -22,7 +27,6 @@ const STATUS_TONE: Record<string, Tone> = {
   LATE: "amber",
   ABSENT: "red",
   LEAVE: "purple",
-  ON_LEAVE: "purple",
   PERMIT: "cyan",
   // projects / tasks
   PLANNED: "neutral",
@@ -54,6 +58,8 @@ const STATUS_LABEL: Record<string, string> = {
   PERMANENT: "Chính thức",
   CONTRACT: "Hợp đồng",
   ON_LEAVE: "Tạm nghỉ",
+  UPCOMING_EXIT: "Sắp nghỉ",
+  ABANDONED: "Bỏ việc",
   PLANNING: "Lập kế hoạch",
   PLANNED: "Đã lên kế hoạch",
   IN_PROGRESS: "Đang thực hiện",

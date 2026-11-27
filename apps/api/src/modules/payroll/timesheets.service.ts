@@ -65,7 +65,7 @@ export class TimesheetsService {
       );
     const [employees, attendances, config] = await Promise.all([
       this.prisma.employee.findMany({
-        where: { deletedAt: null, workStatus: { not: "INACTIVE" } },
+        where: { deletedAt: null, workStatus: { notIn: ["INACTIVE", "ABANDONED"] } },
         select: { id: true },
       }),
       this.prisma.attendance.findMany({
@@ -85,7 +85,6 @@ export class TimesheetsService {
         select: {
           timezone: true,
           workUnitMode: true,
-          roundingMinutes: true,
           latePenaltyPerMinute: true,
           missingPunchPenalty: true,
         },
@@ -153,12 +152,26 @@ export class TimesheetsService {
               secondEndTime: dailySchedule.segments[1]?.endTime ?? null,
             }
           : scheduleOverride?.workSchedule ?? scheduleAssignment?.workSchedule;
-        if (!schedule) continue;
         const attendance = attendanceByEmployeeDay.get(
           `${employee.id}:${this.isoDay(workDate)}`,
         );
+        const approvalUpdate = attendance?.approvalUpdate as
+          | { manualScheduleTimes?: { startTime: string; endTime: string; secondStartTime: string; secondEndTime: string } }
+          | null;
+        const manualSchedule = approvalUpdate?.manualScheduleTimes;
+        const resolvedSchedule = manualSchedule
+          ? {
+              id: "manual",
+              name: "Thủ công",
+              startTime: manualSchedule.startTime,
+              endTime: manualSchedule.endTime,
+              secondStartTime: manualSchedule.secondStartTime,
+              secondEndTime: manualSchedule.secondEndTime,
+            }
+          : schedule;
+        if (!resolvedSchedule) continue;
         const computed = this.computeEntry(
-          schedule,
+          resolvedSchedule,
           attendance,
           config,
         );
@@ -283,7 +296,6 @@ export class TimesheetsService {
     config: {
       timezone: string;
       workUnitMode: string;
-      roundingMinutes: number;
       latePenaltyPerMinute: Prisma.Decimal;
       missingPunchPenalty: Prisma.Decimal;
     },
@@ -327,10 +339,7 @@ export class TimesheetsService {
         endMinute - checkOutMinute,
       );
     }
-    const roundedWorkMinutes = this.round(
-      workedMinutes,
-      config.roundingMinutes,
-    );
+    const roundedWorkMinutes = workedMinutes;
     const missingPunch = Boolean(
       attendance && attendance.sessions.some((session) => !session.checkOutAt),
     );
@@ -376,9 +385,6 @@ export class TimesheetsService {
   private timeMinutes(value: string) {
     const [hours, minutes] = value.split(":").map(Number);
     return hours * 60 + minutes;
-  }
-  private round(value: number, increment: number) {
-    return Math.round(value / increment) * increment;
   }
   private day(value: string) {
     return new Date(`${value}T00:00:00.000Z`);

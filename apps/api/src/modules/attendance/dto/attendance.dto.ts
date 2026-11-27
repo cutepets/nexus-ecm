@@ -1,4 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 import {
   ArrayMinSize,
   ArrayMaxSize,
@@ -10,6 +11,8 @@ import {
   IsNumber,
   IsObject,
   IsOptional,
+  Matches,
+  ValidateNested,
   IsString,
   MaxLength,
   MinLength,
@@ -34,11 +37,11 @@ export class CheckDto {
 
   @ApiProperty({
     required: false,
-    enum: ["NONE", "BLINK", "TURN_LEFT", "TURN_RIGHT", "SMILE"],
+    enum: ["NONE", "BLINK", "TURN_LEFT", "TURN_RIGHT", "SMILE", "NOD"],
   })
   @IsOptional()
-  @IsIn(["NONE", "BLINK", "TURN_LEFT", "TURN_RIGHT", "SMILE"])
-  livenessChallenge?: "NONE" | "BLINK" | "TURN_LEFT" | "TURN_RIGHT" | "SMILE";
+  @IsIn(["NONE", "BLINK", "TURN_LEFT", "TURN_RIGHT", "SMILE", "NOD"])
+  livenessChallenge?: "NONE" | "BLINK" | "TURN_LEFT" | "TURN_RIGHT" | "SMILE" | "NOD";
 
   @ApiProperty({
     required: false,
@@ -99,8 +102,8 @@ export class IdentifyCheckDto {
   livenessPassed!: boolean;
 
   @IsOptional()
-  @IsIn(["NONE", "BLINK", "TURN_LEFT", "TURN_RIGHT", "SMILE"])
-  livenessChallenge?: "NONE" | "BLINK" | "TURN_LEFT" | "TURN_RIGHT" | "SMILE";
+  @IsIn(["NONE", "BLINK", "TURN_LEFT", "TURN_RIGHT", "SMILE", "NOD"])
+  livenessChallenge?: "NONE" | "BLINK" | "TURN_LEFT" | "TURN_RIGHT" | "SMILE" | "NOD";
 
   @IsOptional()
   @IsString()
@@ -350,10 +353,30 @@ export class CreateAttendanceSessionDto {
   checkOutAt?: string;
 }
 
+export class ManualScheduleTimesDto {
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  startTime!: string;
+
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  endTime!: string;
+
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  secondStartTime!: string;
+
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  secondEndTime!: string;
+}
+
 export class UpdateAttendanceAdjustmentDto {
   @IsOptional()
   @IsString()
   workScheduleId?: string;
+
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => ManualScheduleTimesDto)
+  manualScheduleTimes?: ManualScheduleTimesDto;
 
   @IsOptional()
   @IsNumber()

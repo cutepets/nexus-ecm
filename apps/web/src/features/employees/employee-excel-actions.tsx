@@ -35,39 +35,9 @@ export function EmployeeExcelActions({ canImport }: { canImport: boolean }) {
   const downloadTemplate = async () => {
     setBusy(true);
     try {
-      const { default: ExcelJS } = await import('exceljs');
-      const workbook = new ExcelJS.Workbook();
-      const sheet = workbook.addWorksheet('NhanVien');
-      const headers = ['employeeNo', 'username', 'fullName', 'email', 'phone', 'gender', 'dateOfBirth', 'identityCode', 'address', 'emergencyContactName', 'emergencyContactPhone', 'joinDate', 'workStatus', 'employmentType', 'branch', 'department', 'position'];
-      sheet.addRow(headers);
-      sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF5422A5' } };
-      sheet.views = [{ state: 'frozen', ySplit: 1 }];
-      sheet.columns = headers.map((header) => ({ header, key: header, width: Math.max(18, header.length + 3) }));
-      for (const column of ['employeeNo', 'username', 'phone', 'identityCode', 'emergencyContactPhone']) sheet.getColumn(headers.indexOf(column) + 1).numFmt = '@';
-      const guide = workbook.addWorksheet('HuongDan');
-      guide.addRows([
-        ['Cột', 'Hướng dẫn'],
-        ['employeeNo', 'Để trống để thêm mới; điền mã nhân viên hiện có để cập nhật hồ sơ đó.'],
-        ['username, fullName, email', 'Bắt buộc khi thêm mới. username dùng chữ thường, số, dấu chấm, gạch dưới hoặc gạch ngang.'],
-        ['Tài khoản mới', 'Mật khẩu khởi tạo là 123456; nhân viên cần đổi sau lần đăng nhập đầu tiên.'],
-        ['joinDate', 'Ngày vào làm theo định dạng YYYY-MM-DD; bắt buộc khi thêm mới.'],
-        ['branch', 'Mã hoặc tên chi nhánh đang hoạt động; bắt buộc khi thêm mới.'],
-        ['department, position', 'Tên phòng ban và chức vụ đã cấu hình; có thể để trống.'],
-        ['workStatus', 'PROBATION, PERMANENT, CONTRACT, ON_LEAVE hoặc INACTIVE.'],
-        ['employmentType', 'FULL_TIME hoặc PART_TIME.'],
-        ['gender', 'MALE, FEMALE, OTHER hoặc UNDISCLOSED.'],
-        ['Các cột khác', 'Để trống khi cập nhật nếu muốn giữ nguyên. Không xóa dòng tiêu đề.'],
-      ]);
-      guide.getRow(1).font = { bold: true };
-      guide.columns = [{ width: 25 }, { width: 100 }];
-      const data = await workbook.xlsx.writeBuffer();
-      // ExcelJS types the result as Node's Buffer even though its browser build
-      // returns an ArrayBuffer. Treat the browser result as the transferable
-      // binary payload so Blob does not receive a Node-only Buffer type.
-      saveFile(new Blob([data as unknown as ArrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'nhan-vien-mau.xlsx');
+      await download('/employees/excel/template', 'nhan-vien-mau.xlsx');
     } catch {
-      toast.error('Không tạo được file mẫu Excel.');
+      toast.error('Không tải được file mẫu Excel.');
     } finally { setBusy(false); }
   };
 

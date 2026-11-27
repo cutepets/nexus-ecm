@@ -18,7 +18,7 @@ import {
 import { useAuthStore } from '@/stores/auth-store';
 import { useLogout } from '@/features/auth/api';
 import { useMyProfile } from '@/features/users/self-profile';
-import { getAudioContextConstructor, playNotificationTone } from '@/features/notifications/sound';
+import { getAudioContextConstructor, playNotificationAudio, playNotificationTone } from '@/features/notifications/sound';
 import { useNotificationPreferences } from '@/stores/notification-preferences';
 
 /** Build initials from a full name, e.g. "Budi Santoso" → "BS". */
@@ -50,6 +50,7 @@ export function Topbar() {
   const soundEnabled = useNotificationPreferences((state) => state.soundEnabled);
   const notificationVolume = useNotificationPreferences((state) => state.volume);
   const notificationTone = useNotificationPreferences((state) => state.tone);
+  const customSoundDataUrl = useNotificationPreferences((state) => state.customSoundDataUrl);
   const knownNotificationIds = useRef<Set<string> | null>(null);
   const audioContext = useRef<AudioContext | null>(null);
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission | 'unsupported'>('unsupported');
@@ -82,7 +83,10 @@ export function Topbar() {
 
     for (const notification of incoming) {
       toast(notification.title, { description: notification.body ?? undefined });
-      if (soundEnabled) playNotificationTone(audioContext.current, notificationTone, notificationVolume);
+      if (soundEnabled) {
+        if (notificationTone === 'CUSTOM') playNotificationAudio(customSoundDataUrl, notificationVolume);
+        else playNotificationTone(audioContext.current, notificationTone, notificationVolume);
+      }
       if (document.hidden && 'Notification' in window && window.Notification.permission === 'granted') {
         const browserNotification = new window.Notification(notification.title, {
           body: notification.body ?? undefined,
@@ -91,7 +95,7 @@ export function Topbar() {
         browserNotification.onclick = () => window.focus();
       }
     }
-  }, [notificationTone, notificationVolume, notifications, soundEnabled]);
+  }, [customSoundDataUrl, notificationTone, notificationVolume, notifications, soundEnabled]);
 
   useEffect(() => {
     const auth = useAuthStore.getState();

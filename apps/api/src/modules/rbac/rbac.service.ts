@@ -3,7 +3,7 @@ import { PrismaService } from '../../core/prisma/prisma.service';
 import { UpdateRoleDto } from './dto/rbac.dto';
 import { AuditService } from '../../core/audit/audit.service';
 import { RoleAssignmentService } from './role-assignment.service';
-import { RoleAssignmentRuleDto } from './dto/rbac.dto';
+import { RoleAssignmentRuleDto, RolePermissionScopeDto } from './dto/rbac.dto';
 
 @Injectable()
 export class RbacService {
@@ -13,10 +13,22 @@ export class RbacService {
     private readonly roleAssignments: RoleAssignmentService,
   ) {}
 
-  listRoles() {
-    return this.prisma.role.findMany({
-      include: { permissions: { include: { permission: true } }, _count: { select: { users: true } } },
-      orderBy: { name: 'asc' },
+  async listRoles() {
+    const [roles, catalog] = await Promise.all([
+      this.prisma.role.findMany({
+        include: { permissions: { include: { permission: true } }, _count: { select: { users: true } } },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.permission.findMany(),
+    ]);
+    return roles.map((role) => role.name !== 'ADMIN' ? role : {
+      ...role,
+      permissions: catalog.map((permission) => ({
+        roleId: role.id,
+        permissionId: permission.id,
+        scope: 'ALL' as const,
+        permission,
+      })),
     });
   }
 
@@ -30,12 +42,13 @@ export class RbacService {
     return this.prisma.role.create({ data: { name, description } });
   }
 
-  async setRolePermissions(roleId: string, permissionKeys: string[]) {
+  async setRolePermissions(roleId: string, permissionGrants: RolePermissionScopeDto[]) {
     const role = await this.prisma.role.findUnique({ where: { id: roleId } });
     if (!role) throw new NotFoundException('Role not found');
     const permissions = await this.prisma.permission.findMany({
-      where: role.name === 'ADMIN' ? {} : { key: { in: permissionKeys } },
+      where: role.name === 'ADMIN' ? {} : { key: { in: permissionGrants.filter(({ scope }) => scope !== 'NONE').map(({ key }) => key) } },
     });
+    const scopeByKey = new Map(permissionGrants.map(({ key, scope }) => [key, scope]));
     if (role.name !== 'ADMIN' && permissions.length === await this.prisma.permission.count()) {
       throw new BadRequestException('Only ADMIN may hold the full permission set');
     }
@@ -43,7 +56,13 @@ export class RbacService {
     await this.prisma.$transaction([
       this.prisma.rolePermission.deleteMany({ where: { roleId } }),
       this.prisma.rolePermission.createMany({
-        data: permissions.map((p) => ({ roleId, permissionId: p.id })),
+        data: permissions.map((permission) => ({
+          roleId,
+          permissionId: permission.id,
+          scope: role.name === 'ADMIN' ? 'ALL' : scopeByKey.get(permission.key) === 'BRANCH'
+            ? 'BRANCH'
+            : scopeByKey.get(permission.key) === 'SELF' ? 'SELF' : 'ALL',
+        })),
         skipDuplicates: true,
       }),
     ]);
@@ -84,23 +103,21 @@ export class RbacService {
 
   async replaceAssignmentRules(rules: RoleAssignmentRuleDto[], actorId: string) {
     for (const rule of rules) {
-      if (!rule.departmentId && !rule.positionId && !rule.branchId) {
-        throw new BadRequestException(`Rule "${rule.name}" needs at least one department, position, or branch condition`);
+      if (!rule.departmentId && !rule.positionId) {
+        throw new BadRequestException(`Rule "${rule.name}" needs at least one department or position condition`);
       }
     }
     const roleIds = [...new Set(rules.map((rule) => rule.roleId))];
-    const [roles, departments, positions, branches] = await Promise.all([
+    const [roles, departments, positions] = await Promise.all([
       this.prisma.role.findMany({ where: { id: { in: roleIds } }, select: { id: true, name: true } }),
       this.prisma.department.findMany({ where: { id: { in: [...new Set(rules.flatMap((rule) => rule.departmentId ? [rule.departmentId] : []))] } }, select: { id: true } }),
       this.prisma.position.findMany({ where: { id: { in: [...new Set(rules.flatMap((rule) => rule.positionId ? [rule.positionId] : []))] } }, select: { id: true } }),
-      this.prisma.branch.findMany({ where: { id: { in: [...new Set(rules.flatMap((rule) => rule.branchId ? [rule.branchId] : []))] } }, select: { id: true } }),
     ]);
     if (roles.length !== roleIds.length) throw new BadRequestException('A selected role does not exist');
     if (roles.some((role) => role.name === 'ADMIN')) throw new BadRequestException('ADMIN is assigned explicitly and cannot be assigned by an automatic rule');
     if (departments.length !== new Set(rules.flatMap((rule) => rule.departmentId ? [rule.departmentId] : [])).size ||
-        positions.length !== new Set(rules.flatMap((rule) => rule.positionId ? [rule.positionId] : [])).size ||
-        branches.length !== new Set(rules.flatMap((rule) => rule.branchId ? [rule.branchId] : [])).size) {
-      throw new BadRequestException('A selected department, position, or branch does not exist');
+        positions.length !== new Set(rules.flatMap((rule) => rule.positionId ? [rule.positionId] : [])).size) {
+      throw new BadRequestException('A selected department or position does not exist');
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -111,7 +128,6 @@ export class RbacService {
             name: rule.name.trim(), roleId: rule.roleId,
             departmentId: rule.departmentId || null,
             positionId: rule.positionId || null,
-            branchId: rule.branchId || null,
             isActive: rule.isActive ?? true,
           },
         });

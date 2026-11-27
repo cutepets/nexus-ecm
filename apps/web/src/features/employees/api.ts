@@ -16,6 +16,8 @@ export interface EmployeeFilters {
   pageSize?: number;
   search?: string;
   departmentId?: string;
+  branchId?: string;
+  upcomingExit?: boolean;
   workStatus?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
@@ -28,6 +30,13 @@ const keys = {
   departments: ['departments'] as const,
   positions: (deptId?: string) => ['positions', deptId ?? 'all'] as const,
 };
+
+export function useEmployeeBranches() {
+  return useQuery({
+    queryKey: ['employees', 'branch-options'],
+    queryFn: async () => (await api.get<{ id: string; name: string }[]>('/employees/options/branches')).data,
+  });
+}
 
 // ---- Employees ----
 

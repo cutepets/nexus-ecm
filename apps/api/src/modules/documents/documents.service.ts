@@ -6,6 +6,14 @@ import { AuditService, AuditContext } from '../../core/audit/audit.service';
 import { NotificationService } from '../../core/notification/notification.service';
 import { AddVersionDto, CreateDocumentDto, CreateFolderDto, ShareDocumentDto } from './dto/document.dto';
 
+interface DocumentReadScope {
+  scope: 'ALL' | 'BRANCH' | 'SELF' | 'NONE';
+  userId: string;
+  branchIds: string[];
+  from: Date;
+  to: Date;
+}
+
 @Injectable()
 export class DocumentsService {
   constructor(
@@ -29,9 +37,11 @@ export class DocumentsService {
   }
 
   // ---- Documents ----
-  listDocuments(folderId?: string, docType?: string) {
+  listDocuments(folderId?: string, docType?: string, access?: DocumentReadScope) {
+    const scopeWhere = this.documentReadScopeWhere(access);
     return this.prisma.document.findMany({
       where: {
+        ...(scopeWhere ? { AND: [scopeWhere] } : {}),
         ...(folderId ? { folderId } : {}),
         ...(docType ? { docType: docType as Prisma.DocumentWhereInput['docType'] } : {}),
       },
@@ -44,9 +54,10 @@ export class DocumentsService {
     });
   }
 
-  async getDocument(id: string) {
-    const doc = await this.prisma.document.findUnique({
-      where: { id },
+  async getDocument(id: string, access?: DocumentReadScope) {
+    const scopeWhere = this.documentReadScopeWhere(access);
+    const doc = await this.prisma.document.findFirst({
+      where: { id, ...(scopeWhere ? { AND: [scopeWhere] } : {}) },
       include: {
         folder: { select: { id: true, name: true } },
         versions: {
@@ -62,6 +73,27 @@ export class DocumentsService {
       doc.versions.map(async (v) => ({ ...v, downloadUrl: await this.storage.presignedDownload(v.fileUrl) })),
     );
     return { ...doc, versions };
+  }
+
+  private documentReadScopeWhere(access?: DocumentReadScope): Prisma.DocumentWhereInput | null {
+    if (!access || access.scope === 'ALL') return null;
+    if (access.scope === 'SELF') return { OR: [{ ownerId: access.userId }, { shares: { some: { sharedWithUserId: access.userId } } }] };
+    if (access.scope === 'NONE' || !access.branchIds.length) return { id: '__none__' };
+    const branchEmployee = {
+      branchAssignments: {
+        some: {
+          branchId: { in: access.branchIds },
+          effectiveFrom: { lte: access.to },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: access.from } }],
+        },
+      },
+    };
+    return {
+      OR: [
+        { owner: { employee: branchEmployee } },
+        { shares: { some: { sharedWith: { employee: branchEmployee } } } },
+      ],
+    };
   }
 
   async createDocument(dto: CreateDocumentDto, ownerId: string, ctx: AuditContext) {

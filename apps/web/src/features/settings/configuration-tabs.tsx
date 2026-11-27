@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, GripVertical, Pencil, Plus, Trash2, X } from "lucide-react";
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -133,6 +133,7 @@ function PolicyPanel() {
         <span className="text-sm font-medium text-ink">Chống gian lận</span>
         <Select
           value={form.livenessMode}
+          disabled={!canUpdate}
           onChange={(e) =>
             setForm({
               ...form,
@@ -140,9 +141,11 @@ function PolicyPanel() {
             })
           }
         >
+          <option value="NONE">Tắt chống gian lận</option>
           <option value="RANDOM">Ngẫu nhiên (mỗi lần một yêu cầu)</option>
           <option value="BLINK">Nháy mắt</option>
           <option value="TURN_HEAD">Quay đầu trái / phải</option>
+          <option value="NOD">Gật đầu</option>
           <option value="SMILE">Mỉm cười</option>
         </Select>
       </label>
@@ -173,19 +176,26 @@ function PolicyPanel() {
         <span className="text-sm font-medium text-ink">
           Độ nhạy phát hiện trùng khuôn mặt
         </span>
-        <Input
-          type="number"
-          min={0.35}
-          max={0.65}
-          step={0.01}
-          value={form.faceDuplicateThreshold}
-          onChange={(e) =>
-            setForm({ ...form, faceDuplicateThreshold: Number(e.target.value) })
-          }
-        />
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            min={35}
+            max={65}
+            step={1}
+            className="w-24"
+            value={Math.round(form.faceDuplicateThreshold * 100)}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                faceDuplicateThreshold: Number(e.target.value) / 100,
+              })
+            }
+          />
+          <span className="text-sm text-ink-muted">%</span>
+        </div>
         <span className="block text-xs text-ink-muted">
           Giá trị thấp hơn sẽ ít báo nhầm hai người khác nhau là cùng một người.
-          Khuyến nghị 0.43.
+          Khuyến nghị 43%.
         </span>
       </label>
       <label className="space-y-1.5">
@@ -498,7 +508,7 @@ function SortableScheduleCard({ schedule, disabled, canMoveUp, canMoveDown, onMo
         <Button type="button" size="icon" variant="ghost" aria-label={`Đưa ca ${schedule.name} lên trên`} disabled={disabled || !canMoveUp} onClick={() => onMove(-1)}><ArrowUp /></Button>
         <Button type="button" size="icon" variant="ghost" aria-label={`Đưa ca ${schedule.name} xuống dưới`} disabled={disabled || !canMoveDown} onClick={() => onMove(1)}><ArrowDown /></Button>
         <Button type="button" size="icon" variant="ghost" aria-label="Sửa ca" onClick={onEdit}><Pencil /></Button>
-        <Button type="button" size="icon" variant="ghost" aria-label="Xóa ca" onClick={onDelete}><Trash2 /></Button>
+        <Button type="button" size="icon" variant="ghost" className="text-rose-600 hover:bg-rose-50 hover:text-rose-700" aria-label="Loại bỏ ca" title="Loại bỏ ca" onClick={onDelete}><X /></Button>
       </div>
     </div>
   );
@@ -580,7 +590,6 @@ function PayrollPanel() {
     payrollCutoffDay: 25,
     timesheetStartDay: 26,
     timesheetEndDay: 25,
-    roundingMinutes: 15,
     latePenaltyPerMinute: 0,
     missingPunchPenalty: 0,
     overtimeTriggerMinutes: 15,
@@ -633,19 +642,14 @@ function PayrollPanel() {
         </Select>
       </label>
       <label className="space-y-1.5">
-        <span className="text-sm font-medium text-ink">Làm tròn (phút)</span>
-        <Select
-          value={String(form.roundingMinutes)}
-          onChange={(e) =>
-            setForm({ ...form, roundingMinutes: Number(e.target.value) })
-          }
-        >
-          {[1, 5, 10, 15, 30, 60].map((value) => (
-            <option key={value} value={value}>
-              {value} phút
-            </option>
-          ))}
-        </Select>
+        <span className="text-sm font-medium text-ink">Ngày chốt lương</span>
+        <Input
+          type="number"
+          min={1}
+          max={31}
+          value={form.payrollCutoffDay}
+          onChange={number("payrollCutoffDay")}
+        />
       </label>
       <label className="space-y-1.5">
         <span className="text-sm font-medium text-ink">Ngày bắt đầu kỳ</span>

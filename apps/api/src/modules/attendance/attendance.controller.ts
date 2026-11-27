@@ -36,9 +36,11 @@ import {
 import { ApplyWorkScheduleRangeDto, BulkDeleteWorkRosterDto, CopyWorkRosterDayDto, GenerateWorkRosterDto, UpdateDailyScheduleDto } from "./dto/work-roster.dto";
 import { RequirePermissions } from "../../common/decorators/require-permissions.decorator";
 import {
+  branchIdsForPeriod,
   CurrentUser,
   RequestUser,
   isPrivileged,
+  permissionScope,
 } from "../../common/decorators/current-user.decorator";
 import { ForbiddenException } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
@@ -443,8 +445,14 @@ export class AttendanceController {
   })
   list(@Query() query: AttendanceQueryDto, @CurrentUser() user: RequestUser) {
     const canManage = isPrivileged(user, "attendance:update");
-    const scope = canManage ? null : (user.employeeId ?? "__none__");
-    return this.attendance.list(query, scope, canManage);
+    const readScope = permissionScope(user, "attendance:read");
+    const reference = query.date ?? query.from ?? query.to;
+    const referenceDate = reference ? new Date(reference) : new Date();
+    const from = query.from ? new Date(query.from) : new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);
+    const to = query.to ? new Date(query.to) : query.date ? new Date(query.date) : new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 0, 23, 59, 59, 999);
+    const scopeEmployeeId = readScope === "ALL" ? null : readScope === "SELF" ? (user.employeeId ?? "__none__") : undefined;
+    const branchIds = readScope === "BRANCH" ? branchIdsForPeriod(user, from, to) : undefined;
+    return this.attendance.list(query, scopeEmployeeId, canManage, branchIds, { from, to });
   }
 
   @Get("summary")

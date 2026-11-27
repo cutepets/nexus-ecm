@@ -64,12 +64,12 @@ export class UpdateCompanySettingDto {
   weekStartsOn?: number;
 
   @ApiPropertyOptional({
-    enum: ["BLINK", "TURN_HEAD", "SMILE", "RANDOM"],
+    enum: ["NONE", "BLINK", "TURN_HEAD", "SMILE", "NOD", "RANDOM"],
     default: "RANDOM",
   })
   @IsOptional()
-  @IsIn(["BLINK", "TURN_HEAD", "SMILE", "RANDOM"])
-  livenessMode?: "BLINK" | "TURN_HEAD" | "SMILE" | "RANDOM";
+  @IsIn(["NONE", "BLINK", "TURN_HEAD", "SMILE", "NOD", "RANDOM"])
+  livenessMode?: "NONE" | "BLINK" | "TURN_HEAD" | "SMILE" | "NOD" | "RANDOM";
 
   @ApiPropertyOptional({ minimum: 0.35, maximum: 0.65, default: 0.43 })
   @IsOptional()
@@ -112,8 +112,8 @@ export class UpdateCompanySettingDto {
 
 export class UpdateAttendancePolicyDto {
   @IsOptional()
-  @IsIn(["BLINK", "TURN_HEAD", "SMILE", "RANDOM"])
-  livenessMode?: "BLINK" | "TURN_HEAD" | "SMILE" | "RANDOM";
+  @IsIn(["NONE", "BLINK", "TURN_HEAD", "SMILE", "NOD", "RANDOM"])
+  livenessMode?: "NONE" | "BLINK" | "TURN_HEAD" | "SMILE" | "NOD" | "RANDOM";
 
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -173,11 +173,6 @@ export class UpdatePayrollSettingDto {
   @Min(1)
   @Max(31)
   timesheetEndDay?: number;
-
-  @IsOptional()
-  @IsInt()
-  @IsIn([1, 5, 10, 15, 30, 60])
-  roundingMinutes?: number;
 
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })

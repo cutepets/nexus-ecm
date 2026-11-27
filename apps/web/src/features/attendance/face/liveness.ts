@@ -2,7 +2,7 @@
 
 import type { FaceDetection } from "./detectFace";
 
-export type LivenessChallenge = "blink" | "turnLeft" | "turnRight" | "smile";
+export type LivenessChallenge = "blink" | "turnLeft" | "turnRight" | "smile" | "nod";
 export type LivenessStage = "baseline" | "challenge" | "recover" | "passed";
 
 export const CHALLENGE_LABEL: Record<LivenessChallenge, string> = {
@@ -10,13 +10,21 @@ export const CHALLENGE_LABEL: Record<LivenessChallenge, string> = {
   turnLeft: "Quay đầu sang bên trái của bạn, rồi nhìn thẳng lại camera",
   turnRight: "Quay đầu sang bên phải của bạn, rồi nhìn thẳng lại camera",
   smile: "Mỉm cười, rồi trở lại nét mặt bình thường",
+  nod: "Gật đầu xuống một lần, rồi nhìn thẳng lại camera",
 };
 
-type FaceMetrics = { eyeRatio: number; noseOffset: number; happiness: number };
+type FaceMetrics = {
+  eyeRatio: number;
+  noseOffset: number;
+  verticalNoseOffset: number;
+  happiness: number;
+};
 const distance = (a: { x: number; y: number }, b: { x: number; y: number }) =>
   Math.hypot(a.x - b.x, a.y - b.y);
 const meanX = (points: { x: number }[]) =>
   points.reduce((sum, point) => sum + point.x, 0) / points.length;
+const meanY = (points: { y: number }[]) =>
+  points.reduce((sum, point) => sum + point.y, 0) / points.length;
 
 function eyeRatio(points: { x: number; y: number }[]) {
   if (points.length < 6) return 0;
@@ -32,10 +40,13 @@ function metricsOf(detection: FaceDetection): FaceMetrics {
   const leftEye = landmarks.getLeftEye();
   const rightEye = landmarks.getRightEye();
   const eyeCentre = (meanX(leftEye) + meanX(rightEye)) / 2;
+  const verticalEyeCentre = (meanY(leftEye) + meanY(rightEye)) / 2;
   const eyeDistance = Math.max(Math.abs(meanX(rightEye) - meanX(leftEye)), 1);
   return {
     eyeRatio: (eyeRatio(leftEye) + eyeRatio(rightEye)) / 2,
     noseOffset: (meanX(landmarks.getNose()) - eyeCentre) / eyeDistance,
+    verticalNoseOffset:
+      (meanY(landmarks.getNose()) - verticalEyeCentre) / eyeDistance,
     happiness: detection.expressions.happy,
   };
 }
@@ -102,6 +113,10 @@ export class LivenessTracker {
     return (
       current.eyeRatio >= Math.max(0.18, referenceEye * 0.8) &&
       Math.abs(current.noseOffset) <= 0.11 &&
+      Math.abs(
+        current.verticalNoseOffset -
+          (baseline?.verticalNoseOffset ?? current.verticalNoseOffset),
+      ) <= 0.11 &&
       current.happiness <= 0.35
     );
   }
@@ -110,7 +125,12 @@ export class LivenessTracker {
     const baseline = this.baseline;
     if (!baseline) return false;
     if (this.challenge === "blink")
-      return current.eyeRatio <= Math.min(0.18, baseline.eyeRatio * 0.72);
+      return (
+        current.eyeRatio <=
+        Math.min(0.3, baseline.eyeRatio * 0.8)
+      );
+    if (this.challenge === "nod")
+      return current.verticalNoseOffset >= baseline.verticalNoseOffset + 0.12;
     if (this.challenge === "smile")
       return current.happiness >= Math.max(0.55, baseline.happiness + 0.15);
     // The preview is mirrored for the user while face-api reads the original

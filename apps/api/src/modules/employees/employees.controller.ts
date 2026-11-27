@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Body,
   Controller,
   Delete,
@@ -20,7 +21,7 @@ import { CreateEmployeeDto, UpdateEmployeeDto, EmployeeQueryDto, PermanentDelete
 import { CreateJobHistoryDto, CreateSalaryHistoryDto } from './dto/history.dto';
 import { CreateDocumentDto, PresignCreateEmployeeUploadDto, PresignUploadDto } from './dto/document.dto';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
-import { CurrentUser, isPrivileged, RequestUser } from '../../common/decorators/current-user.decorator';
+import { branchIdsForPeriod, CurrentUser, permissionScope, RequestUser } from '../../common/decorators/current-user.decorator';
 import { EmployeesExcelService } from './employees-excel.service';
 
 @ApiTags('employees')
@@ -29,11 +30,47 @@ import { EmployeesExcelService } from './employees-excel.service';
 export class EmployeesController {
   constructor(private readonly employees: EmployeesService, private readonly excel: EmployeesExcelService) {}
 
+  @Get('options/branches')
+  @RequirePermissions('employee:read')
+  listBranches(@CurrentUser() user: RequestUser) {
+    const start = new Date();
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start.getFullYear(), start.getMonth() + 1, 0, 23, 59, 59, 999);
+    return this.employees.listBranchesForEmployeeAccess({
+      scope: permissionScope(user, 'employee:read'),
+      employeeId: user.employeeId,
+      branchIds: branchIdsForPeriod(user, start, end),
+      from: start,
+      to: end,
+    });
+  }
+
   @Get()
   @RequirePermissions('employee:read')
   @ApiOperation({ summary: 'List employees (paginated, filterable)' })
   list(@Query() query: EmployeeQueryDto, @CurrentUser() user: RequestUser) {
-    return this.employees.list(query, isPrivileged(user, 'payroll:read'));
+    const start = new Date();
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start.getFullYear(), start.getMonth() + 1, 0, 23, 59, 59, 999);
+    const payrollScope = permissionScope(user, 'payroll:read');
+    const employeeScope = permissionScope(user, 'employee:read');
+    const includeCompensation = payrollScope === 'ALL' || payrollScope === 'BRANCH' || (payrollScope === 'SELF' && employeeScope === 'SELF');
+    return this.employees.list(query, includeCompensation, {
+      scope: employeeScope,
+      employeeId: user.employeeId,
+      branchIds: branchIdsForPeriod(user, start, end),
+      from: start,
+      to: end,
+    });
+  }
+
+  @Get('username-suggestion')
+  @RequirePermissions('employee:create')
+  suggestUsername(@Query('fullName') fullName: string | undefined) {
+    if (!fullName?.trim()) throw new BadRequestException('Nhập họ và tên để gợi ý tên đăng nhập.');
+    return this.employees.suggestUsername(fullName.trim());
   }
 
   @Get('excel/template')
@@ -47,8 +84,8 @@ export class EmployeesController {
 
   @Get('excel/export')
   @RequirePermissions('employee:read')
-  async excelExport(@Res() res: Response) {
-    const buffer = await this.excel.export();
+  async excelExport(@Res() res: Response, @CurrentUser() user: RequestUser) {
+    const buffer = await this.excel.export(user);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="nhan-vien.xlsx"');
     res.send(buffer);
@@ -81,18 +118,39 @@ export class EmployeesController {
   @RequirePermissions('employee:read')
   @ApiOperation({ summary: 'Get one employee with history & documents' })
   getOne(@Param('id') id: string, @CurrentUser() user: RequestUser) {
-    return this.employees.getById(id, isPrivileged(user, 'payroll:read'));
+    const start = new Date();
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start.getFullYear(), start.getMonth() + 1, 0, 23, 59, 59, 999);
+    const payrollScope = permissionScope(user, 'payroll:read');
+    const includeCompensation = payrollScope === 'ALL' || payrollScope === 'BRANCH' || (payrollScope === 'SELF' && id === user.employeeId);
+    return this.employees.getById(id, includeCompensation, {
+      scope: permissionScope(user, 'employee:read'),
+      employeeId: user.employeeId,
+      branchIds: branchIdsForPeriod(user, start, end),
+      from: start,
+      to: end,
+    });
   }
 
   @Post()
   @RequirePermissions('employee:create')
   @ApiOperation({ summary: 'Create an employee' })
   create(@Body() dto: CreateEmployeeDto, @CurrentUser() user: RequestUser) {
+    const scope = permissionScope(user, 'employee:create');
+    if (scope === 'SELF') throw new ForbiddenException('Phạm vi quyền không cho phép tạo hồ sơ cho nhân viên khác');
+    if (scope === 'BRANCH') {
+      const { from, to } = this.currentMonth();
+      const branchIds = branchIdsForPeriod(user, from, to);
+      if ([dto.primaryBranchId, ...(dto.branchIds ?? [])].some((branchId) => !branchIds.includes(branchId))) {
+        throw new ForbiddenException('Chỉ được tạo hồ sơ trong chi nhánh được phân quyền');
+      }
+    }
     return this.employees.create(
       dto,
       { actorId: user.id },
-      isPrivileged(user, 'payroll:update'),
-      isPrivileged(user, 'branch:create') && isPrivileged(user, 'attendance-policy:update'),
+      ['ALL', 'BRANCH'].includes(permissionScope(user, 'payroll:update')),
+      permissionScope(user, 'branch:create') !== 'NONE' && permissionScope(user, 'attendance-policy:update') !== 'NONE',
     );
   }
 
@@ -106,13 +164,24 @@ export class EmployeesController {
   @Put(':id')
   @RequirePermissions('employee:update')
   @ApiOperation({ summary: 'Update an employee' })
-  update(@Param('id') id: string, @Body() dto: UpdateEmployeeDto, @CurrentUser() user: RequestUser) {
+  async update(@Param('id') id: string, @Body() dto: UpdateEmployeeDto, @CurrentUser() user: RequestUser) {
+    const scope = permissionScope(user, 'employee:update');
+    if (scope === 'SELF' && id !== user.employeeId) throw new ForbiddenException('Chỉ được cập nhật hồ sơ của chính mình');
+    if (scope === 'SELF' && (dto.primaryBranchId !== undefined || dto.branchIds !== undefined)) throw new ForbiddenException('Không thể thay đổi chi nhánh trong phạm vi cá nhân');
+    if (scope === 'BRANCH') {
+      const { from, to } = this.currentMonth();
+      const branchIds = branchIdsForPeriod(user, from, to);
+      await this.employees.getById(id, false, { scope, employeeId: user.employeeId, branchIds, from, to });
+      if ([dto.primaryBranchId, ...(dto.branchIds ?? [])].filter(Boolean).some((branchId) => !branchIds.includes(branchId!))) {
+        throw new ForbiddenException('Chỉ được chuyển nhân viên trong các chi nhánh được phân quyền');
+      }
+    }
     return this.employees.update(
       id,
       dto,
       { actorId: user.id },
-      isPrivileged(user, 'payroll:update'),
-      isPrivileged(user, 'branch:create') && isPrivileged(user, 'attendance-policy:update'),
+      ['ALL', 'BRANCH'].includes(permissionScope(user, 'payroll:update')),
+      permissionScope(user, 'branch:create') !== 'NONE' && permissionScope(user, 'attendance-policy:update') !== 'NONE',
     );
   }
 
@@ -196,5 +265,13 @@ export class EmployeesController {
     @CurrentUser() user: RequestUser,
   ) {
     return this.employees.removeDocument(id, docId, { actorId: user.id });
+  }
+
+  private currentMonth() {
+    const from = new Date();
+    from.setDate(1);
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(from.getFullYear(), from.getMonth() + 1, 0, 23, 59, 59, 999);
+    return { from, to };
   }
 }

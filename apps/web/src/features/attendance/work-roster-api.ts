@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
+import type { WorkStatus } from "@nexus/shared";
 
 export interface RosterBranch { id: string; code: string; name: string }
 export interface RosterEntry {
@@ -12,7 +13,7 @@ export interface RosterEntry {
   scheduleName: string;
   note?: string | null;
   source: string;
-  employee: { id: string; fullName: string; employeeNo: string; photoUrl?: string | null; avatarUrl?: string | null };
+  employee: { id: string; fullName: string; employeeNo: string; photoUrl?: string | null; avatarUrl?: string | null; employmentType: "FULL_TIME" | "PART_TIME"; joinDate: string; exitDate?: string | null; workStatus: WorkStatus };
   segments: Array<{ id: string; sequence: number; startTime: string; endTime: string; branch: RosterBranch }>;
 }
 export interface WorkRoster { month: string; rosterId?: string; branches: RosterBranch[]; entries: RosterEntry[] }
@@ -22,8 +23,8 @@ const errorMessage = (error: unknown, fallback: string) => {
   return Array.isArray(message) ? message.join("; ") : message ?? fallback;
 };
 
-export function useWorkRoster(month: string) {
-  return useQuery({ queryKey: key(month), queryFn: async () => (await api.get<WorkRoster>("/attendance/roster", { params: { month } })).data });
+export function useWorkRoster(month: string, enabled = true) {
+  return useQuery({ queryKey: key(month), queryFn: async () => (await api.get<WorkRoster>("/attendance/roster", { params: { month } })).data, enabled });
 }
 export function useGenerateWorkRoster(month: string) {
   const client = useQueryClient();

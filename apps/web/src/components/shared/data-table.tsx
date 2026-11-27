@@ -368,7 +368,10 @@ export function DataTable<TData, TValue>({
       </div>
 
       <div className="w-full min-w-0 max-w-full overflow-hidden rounded-card border border-border bg-card shadow-card">
-        <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain">
+        <div
+          className="max-h-[75dvh] min-h-0 w-full min-w-0 overflow-auto overscroll-contain"
+          style={{ maxHeight: 'max(12rem, min(75dvh, calc(100dvh - 24rem)))' }}
+        >
           <table
             className="table-auto w-full min-w-max text-sm"
             style={{ width: "100%", minWidth: minTableWidth || undefined }}
@@ -381,7 +384,7 @@ export function DataTable<TData, TValue>({
                     return (
                       <th
                         key={header.id}
-                        className="relative truncate whitespace-nowrap px-2 py-3 text-left text-xs font-medium text-ink-subtle"
+                        className="sticky top-0 z-10 relative truncate whitespace-nowrap bg-card px-2 py-3 text-left text-xs font-medium text-ink-subtle"
                         style={{ width: columnWidth(header.column.id, header.column.columnDef.size) }}
                       >
                         {header.isPlaceholder ? null : canSort ? (

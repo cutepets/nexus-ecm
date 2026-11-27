@@ -2,6 +2,7 @@ import { ApiProperty, PartialType } from '@nestjs/swagger';
 import {
   IsDateString,
   IsArray,
+  IsBoolean,
   ArrayUnique,
   IsEmail,
   IsEnum,
@@ -12,14 +13,22 @@ import {
   IsString,
   ValidateNested,
   Matches,
+  Min,
   MinLength,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 
-const WORK_STATUS = ['PROBATION', 'PERMANENT', 'CONTRACT', 'ON_LEAVE', 'INACTIVE'] as const;
+const WORK_STATUS = ['PROBATION', 'PERMANENT', 'ON_LEAVE', 'INACTIVE', 'ABANDONED'] as const;
 type WorkStatus = (typeof WORK_STATUS)[number];
 const GENDERS = ['MALE', 'FEMALE', 'OTHER', 'UNDISCLOSED'] as const;
 type Gender = (typeof GENDERS)[number];
+
+export function normalizeEmployeePhone(value: unknown) {
+  if (typeof value !== 'string' && typeof value !== 'number') return value;
+  const input = String(value).trim();
+  const compact = input.replace(/[\s().-]/g, '');
+  return /^\d{9}$/.test(compact) ? `0${compact}` : input;
+}
 
 export class CreateEmployeeDto {
   @ApiProperty({ example: 'Budi Santoso' })
@@ -55,6 +64,7 @@ export class CreateEmployeeDto {
   password?: string;
 
   @ApiProperty({ required: false })
+  @Transform(({ value }) => normalizeEmployeePhone(value))
   @IsOptional()
   @IsString()
   phone?: string;
@@ -75,9 +85,10 @@ export class CreateEmployeeDto {
   dateOfBirth?: string;
 
   @ApiProperty({ required: false, description: 'Vietnamese identity card number (9 or 12 digits)' })
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() || null : value)
   @IsOptional()
   @Matches(/^\d{9}$|^\d{12}$/, { message: 'CCCD/CMND must contain 9 or 12 digits' })
-  identityCode?: string;
+  identityCode?: string | null;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -85,6 +96,7 @@ export class CreateEmployeeDto {
   emergencyContactName?: string;
 
   @ApiProperty({ required: false })
+  @Transform(({ value }) => normalizeEmployeePhone(value))
   @IsOptional()
   @IsString()
   emergencyContactPhone?: string;
@@ -115,6 +127,13 @@ export class CreateEmployeeDto {
   @Type(() => Number)
   @IsNumber()
   spaBonusPercent?: number;
+
+  @ApiProperty({ required: false, default: 20, minimum: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  probationDays?: number;
 
   @ApiProperty({ enum: ['FULL_TIME', 'PART_TIME'], required: false, default: 'FULL_TIME' })
   @IsOptional()
@@ -268,10 +287,23 @@ export class EmployeeQueryDto {
   @IsString()
   departmentId?: string;
 
-  @ApiProperty({ enum: WORK_STATUS, required: false })
+  @ApiProperty({ required: false })
   @IsOptional()
-  @IsEnum(WORK_STATUS)
-  workStatus?: WorkStatus;
+  @IsString()
+  branchId?: string;
+
+  @ApiProperty({ required: false, description: 'Filter employees whose exit date is today or in the future' })
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsOptional()
+  @IsBoolean()
+  upcomingExit?: boolean;
+
+  @ApiProperty({ enum: WORK_STATUS, isArray: true, required: false })
+  @Transform(({ value }) => value === undefined || value === null ? value : (Array.isArray(value) ? value : String(value).split(',')).flatMap((item) => String(item).split(',')).map((item) => item.trim()).filter(Boolean))
+  @IsOptional()
+  @IsArray()
+  @IsEnum(WORK_STATUS, { each: true })
+  workStatus?: WorkStatus[];
 
   @ApiProperty({ required: false, default: 'createdAt' })
   @IsOptional()
