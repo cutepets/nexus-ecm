@@ -51,6 +51,8 @@ export default function CandidatesPage() {
   const { data: branches = [] } = useCandidateBranches();
   const createCandidate = useCreateCandidate();
   const updateCandidate = useUpdateCandidate();
+  const isUpdatePending = updateCandidate.isPending;
+  const mutateCandidate = updateCandidate.mutate;
   const deleteCandidate = useDeleteCandidate();
   const canCreate = hasPermission('candidate:create');
   const canUpdate = hasPermission('candidate:update');
@@ -167,9 +169,9 @@ export default function CandidatesPage() {
           <Select
             aria-label={`Trạng thái ${candidate.fullName}`}
             value={candidate.status}
-            disabled={updateCandidate.isPending}
+            disabled={isUpdatePending}
             className={`h-8 min-w-32 font-medium ${color}`}
-            onChange={(event) => updateCandidate.mutate({ id: candidate.id, status: event.target.value as CandidateStatus })}
+            onChange={(event) => mutateCandidate({ id: candidate.id, status: event.target.value as CandidateStatus })}
           >
             {CANDIDATE_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value} className={color}>{option.label}</option>)}
           </Select>
@@ -221,7 +223,7 @@ export default function CandidatesPage() {
         </div>
       ),
     },
-  ], [canDelete, canUpdate]);
+  ], [canDelete, canUpdate, isUpdatePending, mutateCandidate]);
 
   return (
     <div className="space-y-5">

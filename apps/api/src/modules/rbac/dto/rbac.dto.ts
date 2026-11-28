@@ -3,7 +3,12 @@ import { IsArray, IsBoolean, IsIn, IsOptional, IsString, Matches, MinLength, Val
 import { Type } from 'class-transformer';
 
 export class CreateRoleDto {
-  @ApiProperty({ example: 'AUDITOR' })
+  @ApiProperty({ example: 'auditor' })
+  @IsString()
+  @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+  code!: string;
+
+  @ApiProperty({ example: 'Kiểm toán viên' })
   @IsString()
   @MinLength(2)
   name!: string;
@@ -15,10 +20,10 @@ export class CreateRoleDto {
 }
 
 export class UpdateRoleDto {
-  @ApiProperty({ required: false, example: 'AUDITOR' })
+  @ApiProperty({ required: false, example: 'Kiểm toán viên' })
   @IsOptional()
   @IsString()
-  @Matches(/^[A-Za-z0-9_-]{2,40}$/)
+  @MinLength(2)
   name?: string;
 
   @ApiProperty({ required: false, example: 'Giám sát kiểm tra dữ liệu' })
@@ -83,4 +88,16 @@ export class UpdateRoleAssignmentRulesDto {
   @ValidateNested({ each: true })
   @Type(() => RoleAssignmentRuleDto)
   rules!: RoleAssignmentRuleDto[];
+}
+
+export class SetRoleAssignmentRuleDto {
+  @ApiProperty({ required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  departmentId?: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  positionId?: string | null;
 }

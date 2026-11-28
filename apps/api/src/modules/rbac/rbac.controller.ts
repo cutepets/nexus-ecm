@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Put } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { RbacService } from './rbac.service';
-import { AssignRoleDto, CreateRoleDto, SetRolePermissionsDto, UpdateRoleDto, UpdateRoleAssignmentRulesDto } from './dto/rbac.dto';
+import { AssignRoleDto, CreateRoleDto, SetRoleAssignmentRuleDto, SetRolePermissionsDto, UpdateRoleDto, UpdateRoleAssignmentRulesDto } from './dto/rbac.dto';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { CurrentUser, RequestUser } from '../../common/decorators/current-user.decorator';
 
@@ -32,6 +32,13 @@ export class RbacController {
     return this.rbac.listAssignmentRules();
   }
 
+  @Put('roles/:id/assignment-rule')
+  @RequirePermissions('rbac:update')
+  @ApiOperation({ summary: 'Set the automatic employee assignment condition for one role' })
+  setRoleAssignmentRule(@Param('id') id: string, @Body() dto: SetRoleAssignmentRuleDto, @CurrentUser() user: RequestUser) {
+    return this.rbac.setRoleAssignmentRule(id, dto, user.id);
+  }
+
   @Put('role-assignment-rules')
   @RequirePermissions('rbac:update')
   @ApiOperation({ summary: 'Replace automatic role assignment rules and sync employee roles' })
@@ -43,7 +50,7 @@ export class RbacController {
   @RequirePermissions('rbac:create')
   @ApiOperation({ summary: 'Create a custom role' })
   createRole(@Body() dto: CreateRoleDto) {
-    return this.rbac.createRole(dto.name, dto.description);
+    return this.rbac.createRole(dto.code, dto.name, dto.description);
   }
 
   @Put('roles/:id/permissions')

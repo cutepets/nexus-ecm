@@ -52,6 +52,7 @@ export default function TugasPage() {
 
         <TabsContent value="table">
           <DataTable
+            tableId="task-list"
             columns={columns}
             data={tasks ?? []}
             loading={isLoading}

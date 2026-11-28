@@ -246,7 +246,7 @@ export class AttendanceController {
     @Param("id") id: string,
     @CurrentUser() user: RequestUser,
   ) {
-    if (!user.roles.includes("ADMIN"))
+    if (!user.roles.includes("admin"))
       throw new ForbiddenException(
         "Chỉ quản trị viên được xóa phiếu xin duyệt",
       );
@@ -372,7 +372,7 @@ export class AttendanceController {
     return this.attendance.correctionRequests(
       id,
       scope,
-      user.roles.includes("ADMIN"),
+      user.roles.includes("admin"),
     );
   }
 
@@ -596,6 +596,6 @@ export class AttendanceController {
     const scope = isPrivileged(user, "attendance:update")
       ? null
       : (user.employeeId ?? "__none__");
-    return this.attendance.getDetail(id, scope, user.roles.includes("ADMIN"));
+    return this.attendance.getDetail(id, scope, user.roles.includes("admin"));
   }
 }

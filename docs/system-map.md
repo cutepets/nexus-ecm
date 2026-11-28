@@ -37,6 +37,7 @@ Modules are registered from `apps/api/src/app.module.ts`:
 | Collaboration | `chat` | REST messaging, announcements and Socket.IO realtime events |
 | Overview | `dashboard` | Dashboard aggregates, activity, calendar and search |
 | Administration | `settings`, `integrations` | Company/branch policy and external integration endpoints |
+| Network security | `security` | Vietnam-only GeoIP check, IP failure windows, temporary/permanent blocks and audit settings |
 | Platform | `health` | Liveness/readiness probes |
 
 Cross-cutting providers live under `apps/api/src/core/`: Prisma, encrypted data,
@@ -61,7 +62,7 @@ permission-filtered app shell:
 | `/dashboard/kalender` | Company calendar and daily work roster |
 | `/dashboard/phan-quyen`, `/dashboard/tai-khoan` | Access and account administration |
 | `/dashboard/thong-bao` | Notification center |
-| `/dashboard/pengaturan` | Company, branch, attendance, payroll and integration settings |
+| `/dashboard/pengaturan` | Company, branch, attendance, payroll, integration and IP security settings |
 | `/dashboard/profil` | Current user's self-service profile |
 
 Feature API hooks and UI are grouped under `apps/web/src/features/`; reusable
@@ -115,6 +116,16 @@ in `docker/docker-compose.yml` and `.env`. Stop local infrastructure with
 Useful checks: `pnpm typecheck`, `pnpm build`, and `pnpm --filter @nexus/api test`.
 Attendance camera pages additionally need the committed face models and a camera;
 real deployment needs production secrets, TLS, persistent storage and backups.
+
+## Production deployment
+
+Production on the current VPS reuses its existing Caddy on ports 80/443.
+`docker/docker-compose.prod.yml` attaches API/web to external Docker network
+`n8n_net`; PostgreSQL, Redis and MinIO stay private on Nexus's Compose network.
+Point an owned domain at the VPS, set the public HTTPS origins, mount GeoLite2
+Country at `geoip/GeoLite2-Country.mmdb`, then add the Nexus site block to the
+existing Caddy config. See [`DEPLOYMENT_SECURITY.md`](../DEPLOYMENT_SECURITY.md)
+for the verified VPS details and install procedure.
 
 ## Handoff
 

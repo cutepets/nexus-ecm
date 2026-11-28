@@ -1,15 +1,19 @@
 # =========================================================================
-# Nexus ECM — Production stack (app images + data services)
+# Nexus ECM — Production stack
 # Usage: docker compose -f docker/docker-compose.prod.yml --env-file .env up -d --build
+# Existing VPS Caddy terminates TLS; this stack joins its external Docker network.
+# PostgreSQL persists data across stack renames via explicit volume names.
+# Redis is shared with n8n on DB index 1; n8n uses its own default DB index.
 # Run migrations once after first boot:
 #   docker compose -f docker/docker-compose.prod.yml exec api \
 #     node packages/database/node_modules/.bin/prisma migrate deploy --schema packages/database/schema.prisma
 # =========================================================================
-name: nexus-ecm-prod
+name: nexus-ecm
 
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: nexus-ecm-postgres
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -23,43 +27,22 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    restart: always
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   minio:
-    image: minio/minio:latest
+    image: rustfs/rustfs:1.0.7
     restart: always
-    command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_ACCESS_KEY: ${MINIO_ROOT_USER}
+      RUSTFS_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 15s
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/health"]
+      interval: 20s
       timeout: 5s
       retries: 5
-
-  minio-init:
-    image: minio/mc:latest
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
-      mc mb --ignore-existing local/${MINIO_BUCKET};
-      echo 'bucket ready';
-      "
 
   api:
     build:
@@ -70,18 +53,24 @@ services:
     environment:
       NODE_ENV: production
       API_PORT: 4000
+      WEB_URL: ${WEB_URL:?Set WEB_URL to the public frontend URL}
+      GEOIP_COUNTRY_FILTER_ENABLED: ${GEOIP_COUNTRY_FILTER_ENABLED:-false}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://n8n-redis:6379/1
       MINIO_ENDPOINT: minio
     depends_on:
       postgres:
         condition: service_healthy
       minio:
         condition: service_healthy
-    ports:
-      - "${API_PORT:-4100}:4000"
+    networks:
+      default: {}
+      proxy:
+        aliases:
+          - nexus-api
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4000/api/v1/health"]
+      test: ["CMD", "wget", "--header=X-Forwarded-Proto:https", "-qO-", "http://localhost:4000/api/v1/health"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -90,16 +79,28 @@ services:
     build:
       context: ..
       dockerfile: docker/web.Dockerfile
+      args:
+        API_URL: ${API_URL:?Set API_URL to the public HTTPS origin}
+        NEXT_PUBLIC_API_URL: ${API_URL}/api/v1
     restart: always
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:4100}/api/v1
+      NEXT_PUBLIC_API_URL: ${API_URL}/api/v1
     depends_on:
       - api
-    ports:
-      - "${WEB_PORT:-3100}:3000"
+    networks:
+      proxy:
+        aliases:
+          - nexus-web
 
 volumes:
   postgres_data:
-  redis_data:
+    name: nexus-ecm-prod_postgres_data
   minio_data:
+    name: nexus-ecm-prod_minio_data
+
+networks:
+  default: {}
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-n8n_net}

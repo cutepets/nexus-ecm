@@ -34,18 +34,22 @@ export async function globalSearch(q: string): Promise<SearchHit[]> {
   return (await api.get<SearchHit[]>('/search', { params: { q } })).data;
 }
 
-export function useNotifications() {
+export function useNotifications(enabled = true) {
   return useQuery({
     queryKey: ['notifications'],
     queryFn: async () => (await api.get<Notification[]>('/notifications')).data,
-    refetchInterval: 30_000,
+    enabled,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
   });
 }
-export function useUnreadCount() {
+export function useUnreadCount(enabled = true) {
   return useQuery({
     queryKey: ['notifications', 'unread'],
     queryFn: async () => (await api.get<{ count: number }>('/notifications/unread-count')).data,
-    refetchInterval: 30_000,
+    enabled,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
   });
 }
 export function useMarkAllRead() {

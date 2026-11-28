@@ -83,8 +83,12 @@ export function useFaceCamera(): UseFaceCameraResult {
       try {
         setReady(false);
         setError(null);
-        await loadModels();
-        if (cancelled) return;
+        // Fetch face models while the browser opens the camera so the two
+        // startup waits overlap instead of delaying the preview sequentially.
+        const modelsPromise = loadModels().then(
+          () => null,
+          (modelError: unknown) => modelError,
+        );
 
         try {
           localStream = await acquireStream(facingMode);
@@ -95,6 +99,9 @@ export function useFaceCamera(): UseFaceCameraResult {
           localStream = await acquireStream(facingMode);
         }
         if (cancelled) { releaseStream(localStream, video); return; }
+
+        const modelsError = await modelsPromise;
+        if (modelsError) throw modelsError;
 
         streamRef.current = localStream;
         if (!video) throw new DOMException('Không tìm thấy khung camera', 'AbortError');

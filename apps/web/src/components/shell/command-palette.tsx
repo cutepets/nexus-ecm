@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Command } from 'cmdk';
 import { Search } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { NAV_ITEMS } from '@/lib/nav';
+import { canAccessNavItem, NAV_ITEMS } from '@/lib/nav';
 import { useAuthStore } from '@/stores/auth-store';
 import { globalSearch, type SearchHit } from '@/features/dashboard/api';
 
@@ -36,22 +36,23 @@ export function CommandPalette() {
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
-  const items = NAV_ITEMS.filter((i) => !i.permission || hasPermission(i.permission));
+  const items = NAV_ITEMS.filter((item) => canAccessNavItem(item, hasPermission));
 
   const [query, setQuery] = React.useState('');
   const [hits, setHits] = React.useState<SearchHit[]>([]);
 
   // Debounced global search across entities.
   React.useEffect(() => {
-    if (query.trim().length < 2) {
+    if (!open || query.trim().length < 2) {
       setHits([]);
       return;
     }
+    let active = true;
     const t = setTimeout(() => {
-      globalSearch(query).then(setHits).catch(() => setHits([]));
+      globalSearch(query).then((results) => { if (active) setHits(results); }).catch(() => { if (active) setHits([]); });
     }, 250);
-    return () => clearTimeout(t);
-  }, [query]);
+    return () => { active = false; clearTimeout(t); };
+  }, [open, query]);
 
   const go = (href: string) => {
     setOpen(false);

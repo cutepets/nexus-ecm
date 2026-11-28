@@ -9,6 +9,7 @@ import { PrismaService } from '../../core/prisma/prisma.service';
 import { UsersService, ResolvedUser } from '../users/users.service';
 import { PasswordService } from './password.service';
 import { AccessTokenPayload } from './strategies/jwt.strategy';
+import { IpSecurityService } from '../security/ip-security.service';
 
 interface RefreshPayload {
   sub: string;
@@ -21,18 +22,33 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly password: PasswordService,
     private readonly jwt: JwtService,
+    private readonly ipSecurity: IpSecurityService,
   ) {}
 
   // ---- Public API ----
 
   async login(identifier: string, plainPassword: string, ctx: { ip?: string; ua?: string }) {
     const user = await this.users.findByLoginIdentifier(identifier);
-    if (!user || !user.isActive) throw new UnauthorizedException('Invalid credentials');
+    if (!user) {
+      if (await this.ipSecurity.recordFailedLogin(ctx.ip ?? '127.0.0.1')) {
+        throw new ForbiddenException('IP_BLOCKED');
+      }
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    if (!user.isActive) throw new ForbiddenException('ACCOUNT_DISABLED');
 
     const ok = await this.password.verify(user.passwordHash, plainPassword);
-    if (!ok) throw new UnauthorizedException('Invalid credentials');
+    if (!ok) {
+      const ipBlocked = await this.ipSecurity.recordFailedLogin(ctx.ip ?? '127.0.0.1');
+      if (ipBlocked) throw new ForbiddenException('IP_BLOCKED');
+      throw new UnauthorizedException('Invalid credentials');
+    }
 
-    await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    const activated = await this.prisma.user.updateMany({
+      where: { id: user.id, isActive: true },
+      data: { lastLoginAt: new Date() },
+    });
+    if (!activated.count) throw new ForbiddenException('ACCOUNT_DISABLED');
     await this.audit(user.id, 'LOGIN', 'User', user.id, ctx);
 
     return this.issueTokens(user, ctx);

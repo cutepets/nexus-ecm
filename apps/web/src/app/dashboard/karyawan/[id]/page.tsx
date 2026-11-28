@@ -70,7 +70,7 @@ export default function EmployeeDetailPage() {
   const [temporaryPassword, setTemporaryPassword] = useState('');
   const [resetPasswordOpen, setResetPasswordOpen] = useState(false);
   const [deleteFaceOpen, setDeleteFaceOpen] = useState(false);
-  const canPermanentlyDelete = user?.roles.includes('ADMIN') && hasPermission('employee:delete');
+  const canPermanentlyDelete = (user?.roles.includes('admin') || user?.roles.includes('ADMIN')) && hasPermission('employee:delete');
 
   if (isLoading) {
     return <Skeleton className="h-96 w-full rounded-card" />;

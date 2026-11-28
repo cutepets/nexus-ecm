@@ -10,7 +10,7 @@ describe('AuthService.logout', () => {
       refreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       auditLog: { create: jest.fn().mockResolvedValue({}) },
     };
-    const service = new AuthService({} as never, prisma as never, {} as never, {} as never);
+    const service = new AuthService({} as never, prisma as never, {} as never, {} as never, {} as never);
     return { service, prisma };
   }
 

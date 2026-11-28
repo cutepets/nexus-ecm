@@ -46,7 +46,8 @@ export function useUploadVersion(documentId: string) {
   return useMutation({
     mutationFn: async (file: File) => {
       const { data: presign } = await api.post<{ url: string; key: string }>('/documents/uploads', { fileName: file.name });
-      await fetch(presign.url, { method: 'PUT', body: file });
+      const response = await fetch(presign.url, { method: 'PUT', body: file });
+      if (!response.ok) throw new Error('Tải tệp lên không thành công');
       return (await api.post(`/documents/${documentId}/versions`, { fileUrl: presign.key, fileName: file.name, sizeBytes: file.size })).data;
     },
     onSuccess: () => {

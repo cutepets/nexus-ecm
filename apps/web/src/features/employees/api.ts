@@ -320,7 +320,8 @@ export function useUploadDocument(employeeId: string) {
         `/employees/${employeeId}/uploads`,
         { fileName: file.name, kind: 'document' },
       );
-      await fetch(presign.url, { method: 'PUT', body: file });
+      const response = await fetch(presign.url, { method: 'PUT', body: file });
+      if (!response.ok) throw new Error(`Tải tệp lên không thành công: ${file.name}`);
       const { data } = await api.post(`/employees/${employeeId}/documents`, {
         docType,
         fileUrl: presign.key,

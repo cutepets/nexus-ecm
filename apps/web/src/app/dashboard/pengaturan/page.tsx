@@ -9,6 +9,7 @@ import {
   CalendarClock,
   ClipboardCheck,
   History,
+  HardDrive,
   ImagePlus,
   Languages,
   Plug,
@@ -33,6 +34,8 @@ import { EmployeeStructureSettings } from "@/features/settings/employee-structur
 import { ConfigurationTabs } from "@/features/settings/configuration-tabs";
 import { NotificationSoundSettings } from "@/features/notifications/notification-sound-settings";
 import { RolePermissionsSettings } from "@/features/rbac/role-permissions-settings";
+import { SecurityAccessSettings } from "@/features/settings/security-access-settings";
+import { StorageSettings } from "@/features/settings/storage-settings";
 import { useAuthStore } from "@/stores/auth-store";
 
 type SettingsSection =
@@ -41,8 +44,10 @@ type SettingsSection =
   | "attendance"
   | "payroll"
   | "integration"
+  | "storage"
   | "notifications"
   | "roles"
+  | "security"
   | "history";
 
 const initialForm: UpdateCompanySetting = {
@@ -96,10 +101,17 @@ export default function PengaturanPage() {
     { id: "attendance" as const, label: "Chấm công & ca làm", icon: ClipboardCheck, enabled: hasPermission("attendance-policy:read") },
     { id: "payroll" as const, label: "Bảng công & lương", icon: CalendarClock, enabled: hasPermission("payroll:read") },
     { id: "integration" as const, label: "Tích hợp & KPI", icon: Plug, enabled: hasPermission("integration:read") },
+    { id: "storage" as const, label: "Lưu trữ", icon: HardDrive, enabled: canReadCompany },
     { id: "notifications" as const, label: "Thông báo", icon: BellRing, enabled: true },
     { id: "roles" as const, label: "Vai trò & quyền", icon: ShieldCheck, enabled: hasPermission("rbac:read") },
+    { id: "security" as const, label: "Bảo mật IP", icon: ShieldCheck, enabled: hasPermission("settings:read") },
     { id: "history" as const, label: "Lịch sử thao tác", icon: History, enabled: canReadAudit },
   ].filter((section) => section.enabled);
+
+  useEffect(() => {
+    const requestedSection = new URLSearchParams(window.location.search).get("section");
+    if (requestedSection === "storage") setActiveSection("storage");
+  }, []);
 
   useEffect(() => {
     if (!settingsSections.some((section) => section.id === activeSection)) {
@@ -388,11 +400,17 @@ export default function PengaturanPage() {
         <ConfigurationTabs tabsToShow={["integration"]} />
       )}
 
+      {activeSection === "storage" && (
+        <StorageSettings canUpdate={hasPermission("settings:update")} />
+      )}
+
       {activeSection === "notifications" && <NotificationSoundSettings />}
 
       {activeSection === "organization" && <EmployeeStructureSettings />}
 
       {activeSection === "roles" && <RolePermissionsSettings />}
+
+      {activeSection === "security" && <SecurityAccessSettings />}
 
       {activeSection === "history" && canReadAudit && <section className="rounded-card border border-border bg-card p-4 shadow-card sm:p-6">
         <div className="mb-4 flex items-center gap-3">
@@ -440,6 +458,7 @@ export default function PengaturanPage() {
           </Select>
         </div>
         <DataTable
+          tableId="audit-log"
           columns={columns}
           data={logs ?? []}
           loading={isLoadingLogs}

@@ -6,12 +6,16 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { useMarkAllRead, useNotifications, useUnreadCount } from "@/features/dashboard/api";
 import { formatDate } from "@/lib/utils";
+import { useAuthStore } from "@/stores/auth-store";
 
 /** Full notification inbox; the bell in the top bar remains the quick view. */
 export default function NotificationsPage() {
-  const { data: notifications, isLoading } = useNotifications();
-  const { data: unread } = useUnreadCount();
+  const canReadNotifications = useAuthStore((state) => state.hasPermission('notification:read'));
+  const { data: notifications, isLoading } = useNotifications(canReadNotifications);
+  const { data: unread } = useUnreadCount(canReadNotifications);
   const markAll = useMarkAllRead();
+
+  if (!canReadNotifications) return null;
 
   return <div className="space-y-6">
     <PageHeader

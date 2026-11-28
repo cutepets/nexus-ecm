@@ -161,6 +161,7 @@ export function CheckScanner({
   const rafRef = useRef<number | null>(null);
   const startedRef = useRef(false);
   const startedAtRef = useRef(0);
+  const lastDetectionAtRef = useRef(0);
   const lastPhotoRef = useRef<string | undefined>();
   const attendancePhotoRef = useRef<string | undefined>();
   const livenessTokenRef = useRef<string | undefined>();
@@ -314,6 +315,7 @@ export function CheckScanner({
       check,
       coords,
       facingMode,
+      kind,
       onPunchCompleted,
       policy,
       stopLoop,
@@ -329,6 +331,7 @@ export function CheckScanner({
       }
       startedRef.current = true;
       startedAtRef.current = Date.now();
+      lastDetectionAtRef.current = 0;
       attendancePhotoRef.current = undefined;
       livenessTokenRef.current = undefined;
       let activeChallenge: LivenessChallenge | null = null;
@@ -370,6 +373,13 @@ export function CheckScanner({
           rafRef.current = requestAnimationFrame(tick);
           return;
         }
+        const now = performance.now();
+        const elapsed = now - lastDetectionAtRef.current;
+        if (elapsed < 100) {
+          rafRef.current = requestAnimationFrame(tick);
+          return;
+        }
+        lastDetectionAtRef.current = now;
         const detection = await detectSingleFace(video);
         if (!detection) {
           if (Date.now() - startedAtRef.current > 20_000) {

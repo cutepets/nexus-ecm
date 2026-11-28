@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { Fingerprint, Pencil, Trash2, X } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { PageHeader } from "@/components/shared/page-header";
@@ -19,12 +20,10 @@ import {
 } from "@/components/ui/dialog";
 import { useAuthStore } from "@/stores/auth-store";
 import { formatCurrency } from "@/lib/utils";
-import { CheckScanner } from "@/features/attendance/check-scanner";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { useEmployees } from "@/features/employees/api";
 import { useBranches } from "@/features/settings/api";
-import { EnrollScanner } from "@/features/attendance/enroll-scanner";
 import {
   useAttendanceHistory,
   useAttendanceList,
@@ -42,6 +41,25 @@ import {
   useCreateAttendanceSession,
   type AttendanceRecord,
 } from "@/features/attendance/api";
+
+const ScannerLoading = () => (
+  <div
+    className="flex min-h-44 items-center justify-center text-sm text-ink-muted"
+    role="status"
+    aria-live="polite"
+  >
+    Đang tải bộ quét camera…
+  </div>
+);
+
+const CheckScanner = dynamic(
+  () => import("@/features/attendance/check-scanner").then((module) => module.CheckScanner),
+  { ssr: false, loading: ScannerLoading },
+);
+const EnrollScanner = dynamic(
+  () => import("@/features/attendance/enroll-scanner").then((module) => module.EnrollScanner),
+  { ssr: false, loading: ScannerLoading },
+);
 
 function timeOf(v?: string | null) {
   return v
@@ -562,19 +580,24 @@ function PersonalApprovalDialog({
         assignedSchedule?.secondEndTime ||
         "",
     );
-  }, [assignedSchedule?.endTime, assignedSchedule?.startTime, reasons, record]);
+  }, [assignedSchedule?.endTime, assignedSchedule?.secondEndTime, assignedSchedule?.secondStartTime, assignedSchedule?.startTime, reasons, record]);
 
+  const recordRef = useRef(record);
   useEffect(() => {
-    if (!record) return;
+    recordRef.current = record;
+  }, [record]);
+  useEffect(() => {
+    const currentRecord = recordRef.current;
+    if (!currentRecord) return;
     setReasons(
-      record.approvalReasons?.length
-        ? record.approvalReasons
-        : record.exceptionType
-          ? [record.exceptionType]
+      currentRecord.approvalReasons?.length
+        ? currentRecord.approvalReasons
+        : currentRecord.exceptionType
+          ? [currentRecord.exceptionType]
           : [],
     );
-    setNote(record.approvalRequestNote ?? "");
-    const requested = record.approvalItems ?? [];
+    setNote(currentRecord.approvalRequestNote ?? "");
+    const requested = currentRecord.approvalItems ?? [];
     const missedPunch = requested.find((item) => item.type === "MISSED_PUNCH");
     const wrongSchedule = requested.find(
       (item) => item.type === "WRONG_SCHEDULE",
@@ -1915,7 +1938,7 @@ function ApprovalItemsReviewer({
   const review = useReviewAttendanceApproval();
   const deleteApproval = useDeleteAttendanceApprovalRequest();
   const isAdmin = useAuthStore(
-    (state) => state.user?.roles.includes("ADMIN") ?? false,
+    (state) => state.user?.roles.some((role) => role === "admin" || role === "ADMIN") ?? false,
   );
   const [reviewNote, setReviewNote] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -2261,19 +2284,23 @@ function CompanyView() {
   const requestedReviewMode = searchParams.get("review") === "1";
   const { data: requestedRecord } = useAttendanceDetail(requestedAttendanceId);
   const [filters, setFilters] = useState({
-    employeeId: "",
+    employeeIds: [] as string[],
     from: "",
     to: "",
     status: "",
   });
-  const hasActiveFilters = Object.values(filters).some(Boolean);
+  const hasActiveFilters = filters.employeeIds.length > 0 || Boolean(filters.from || filters.to || filters.status);
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [employeeFilterOpen, setEmployeeFilterOpen] = useState(false);
   const query = useMemo(
-    () =>
-      Object.fromEntries(
-        Object.entries(filters).filter(([, value]) => Boolean(value)),
+    () => ({
+      ...(filters.employeeIds.length
+        ? { employeeId: filters.employeeIds.join(",") }
+        : {}),
+      ...Object.fromEntries(
+        Object.entries(filters).filter(([key, value]) => key !== "employeeIds" && Boolean(value)),
       ),
+    }),
     [filters],
   );
   const { data: list, isLoading } = useAttendanceHistory(query);
@@ -2282,9 +2309,6 @@ function CompanyView() {
     sortBy: "fullName",
     sortOrder: "asc",
   });
-  const selectedEmployee = employees?.items.find(
-    (employee) => employee.id === filters.employeeId,
-  );
   const matchingEmployees = employees?.items.filter((employee) =>
     `${employee.fullName} ${employee.employeeNo}`
       .toLocaleLowerCase("vi-VN")
@@ -2310,8 +2334,8 @@ function CompanyView() {
     <div className="space-y-6">
       <PageHeader title="Lịch sử chấm công" />
       <section className="rounded-card border border-border bg-card p-4 shadow-card sm:p-6">
-        <div className="mb-4 flex flex-wrap items-end gap-3">
-          <div className="relative min-w-56 flex-1 space-y-1">
+        <div className="mb-4 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-end">
+          <div className="relative min-w-0 space-y-1 lg:min-w-56 lg:flex-1">
             <label htmlFor="attendance-employee-filter" className="sr-only">
               Nhân viên
             </label>
@@ -2322,10 +2346,10 @@ function CompanyView() {
               aria-expanded={employeeFilterOpen}
               aria-controls="attendance-employee-options"
               autoComplete="off"
-              value={employeeFilterOpen ? employeeSearch : selectedEmployee
-                ? `${selectedEmployee.fullName} · ${selectedEmployee.employeeNo}`
-                : ""}
-              placeholder="Tất cả nhân viên"
+              value={employeeFilterOpen ? employeeSearch : filters.employeeIds.length
+                ? `${filters.employeeIds.length} lựa chọn`
+                : "0 lựa chọn"}
+              placeholder="0 lựa chọn"
               onFocus={() => {
                 setEmployeeSearch("");
                 setEmployeeFilterOpen(true);
@@ -2342,34 +2366,42 @@ function CompanyView() {
               <div
                 id="attendance-employee-options"
                 role="listbox"
+                aria-multiselectable="true"
                 className="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-lg"
               >
                 <button
                   type="button"
                   role="option"
-                  aria-selected={!filters.employeeId}
+                  aria-selected={filters.employeeIds.length === 0}
                   className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
                   onClick={() => {
-                    setFilters({ ...filters, employeeId: "" });
+                    setFilters({ ...filters, employeeIds: [] });
                     setEmployeeSearch("");
                     setEmployeeFilterOpen(false);
                   }}
                 >
-                  Tất cả nhân viên
+                  Bỏ chọn tất cả
                 </button>
                 {matchingEmployees?.map((employee) => (
                   <button
                     key={employee.id}
                     type="button"
                     role="option"
-                    aria-selected={filters.employeeId === employee.id}
+                    aria-selected={filters.employeeIds.includes(employee.id)}
                     className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
                     onClick={() => {
-                      setFilters({ ...filters, employeeId: employee.id });
+                      setFilters({
+                        ...filters,
+                        employeeIds: filters.employeeIds.includes(employee.id)
+                          ? filters.employeeIds.filter((id) => id !== employee.id)
+                          : [...filters.employeeIds, employee.id],
+                      });
                       setEmployeeSearch("");
-                      setEmployeeFilterOpen(false);
                     }}
                   >
+                    <span className="mr-2 inline-flex size-4 items-center justify-center rounded border border-border text-xs">
+                      {filters.employeeIds.includes(employee.id) ? "✓" : ""}
+                    </span>
                     {employee.fullName} · {employee.employeeNo}
                   </button>
                 ))}
@@ -2423,11 +2455,11 @@ function CompanyView() {
               type="button"
               variant="secondary"
               size="icon"
-              className="h-10 w-10"
+              className="h-11 w-11 justify-self-start"
               aria-label={"B\u1ecf b\u1ed9 l\u1ecdc"}
               title={"B\u1ecf b\u1ed9 l\u1ecdc"}
               onClick={() => {
-                setFilters({ employeeId: "", from: "", to: "", status: "" });
+                setFilters({ employeeIds: [], from: "", to: "", status: "" });
                 setEmployeeSearch("");
                 setEmployeeFilterOpen(false);
               }}
@@ -2437,6 +2469,7 @@ function CompanyView() {
           )}
         </div>
         <DataTable
+          tableId="attendance-records"
           columns={RECORD_COLUMNS}
           data={list ?? []}
           loading={isLoading}
@@ -2501,7 +2534,7 @@ function PersonalView() {
   );
   const [punchOpen, setPunchOpen] = useState(false);
   const [faceEnrollOpen, setFaceEnrollOpen] = useState(false);
-  useEffect(() => { if (me && !me.enrolled) setFaceEnrollOpen(true); }, [me?.enrolled]);
+  useEffect(() => { if (me?.enrolled === false) setFaceEnrollOpen(true); }, [me?.enrolled]);
   const todayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
   const { data: todayRecords } = useAttendanceList(todayKey, Boolean(employeeId));
   const todayRecord = todayRecords?.[0];
@@ -2513,10 +2546,10 @@ function PersonalView() {
     <div className="space-y-6">
       <PageHeader title="Chấm công của tôi" />
 
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-card border border-border bg-card p-6 shadow-card">
-        <div>
+      <div className="flex min-w-0 flex-col gap-4 rounded-card border border-border bg-card p-4 shadow-card sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="min-w-0 flex-1">
           <div className="text-sm text-ink-muted">Trạng thái hôm nay</div>
-          <div className="mt-1 flex items-center gap-2">
+          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             {attendanceStatus ? (
               <>
                 {attendanceStatus === "NOT_ARRIVED"
@@ -2527,14 +2560,14 @@ function PersonalView() {
             ) : (
               <Badge tone="neutral">Chưa chấm vào</Badge>
             )}
-            <span className="text-sm text-ink-subtle">
+            <span className="min-w-0 text-sm text-ink-subtle">
               Checkin {timeOf(today?.checkInAt)} · Checkout cuối{" "}
               {timeOf(today?.checkOutAt)}
               {sessionCount ? ` · ${sessionCount} phiên` : ""}
             </span>
           </div>
         </div>
-        <Button onClick={() => setPunchOpen(true)}>
+        <Button className="min-h-11 w-full shrink-0 sm:w-auto" onClick={() => setPunchOpen(true)}>
           <Fingerprint /> Chấm công
         </Button>
       </div>
@@ -2568,7 +2601,7 @@ function PersonalView() {
             if (!record.isScheduledPlaceholder) setDetailRecord(record);
           }}
           toolbarContent={
-            <>
+            <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:flex xl:w-auto xl:flex-wrap">
 
           <div className="space-y-1">
             <Input
@@ -2632,7 +2665,7 @@ function PersonalView() {
               type="button"
               variant="secondary"
               size="icon"
-              className="h-10 w-10"
+              className="h-11 w-11 justify-self-start"
               aria-label={"B\u1ecf b\u1ed9 l\u1ecdc"}
               title={"B\u1ecf b\u1ed9 l\u1ecdc"}
               onClick={() =>
@@ -2642,7 +2675,7 @@ function PersonalView() {
               <X />
             </Button>
           )}
-                    </>
+                    </div>
           }
         />
       </section>

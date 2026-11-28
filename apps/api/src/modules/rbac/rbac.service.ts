@@ -3,7 +3,7 @@ import { PrismaService } from '../../core/prisma/prisma.service';
 import { UpdateRoleDto } from './dto/rbac.dto';
 import { AuditService } from '../../core/audit/audit.service';
 import { RoleAssignmentService } from './role-assignment.service';
-import { RoleAssignmentRuleDto, RolePermissionScopeDto } from './dto/rbac.dto';
+import { RoleAssignmentRuleDto, RolePermissionScopeDto, SetRoleAssignmentRuleDto } from './dto/rbac.dto';
 
 @Injectable()
 export class RbacService {
@@ -17,11 +17,11 @@ export class RbacService {
     const [roles, catalog] = await Promise.all([
       this.prisma.role.findMany({
         include: { permissions: { include: { permission: true } }, _count: { select: { users: true } } },
-        orderBy: { name: 'asc' },
+        orderBy: { code: 'asc' },
       }),
       this.prisma.permission.findMany(),
     ]);
-    return roles.map((role) => role.name !== 'ADMIN' ? role : {
+    return roles.map((role) => role.code !== 'admin' ? role : {
       ...role,
       permissions: catalog.map((permission) => ({
         roleId: role.id,
@@ -36,20 +36,20 @@ export class RbacService {
     return this.prisma.permission.findMany({ orderBy: [{ module: 'asc' }, { key: 'asc' }] });
   }
 
-  async createRole(name: string, description?: string) {
-    const exists = await this.prisma.role.findUnique({ where: { name } });
+  async createRole(code: string, name: string, description?: string) {
+    const exists = await this.prisma.role.findUnique({ where: { code } });
     if (exists) throw new BadRequestException('Role already exists');
-    return this.prisma.role.create({ data: { name, description } });
+    return this.prisma.role.create({ data: { code, name: name.trim(), description } });
   }
 
   async setRolePermissions(roleId: string, permissionGrants: RolePermissionScopeDto[]) {
     const role = await this.prisma.role.findUnique({ where: { id: roleId } });
     if (!role) throw new NotFoundException('Role not found');
     const permissions = await this.prisma.permission.findMany({
-      where: role.name === 'ADMIN' ? {} : { key: { in: permissionGrants.filter(({ scope }) => scope !== 'NONE').map(({ key }) => key) } },
+      where: role.code === 'admin' ? {} : { key: { in: permissionGrants.filter(({ scope }) => scope !== 'NONE').map(({ key }) => key) } },
     });
     const scopeByKey = new Map(permissionGrants.map(({ key, scope }) => [key, scope]));
-    if (role.name !== 'ADMIN' && permissions.length === await this.prisma.permission.count()) {
+    if (role.code !== 'admin' && permissions.length === await this.prisma.permission.count()) {
       throw new BadRequestException('Only ADMIN may hold the full permission set');
     }
 
@@ -59,7 +59,7 @@ export class RbacService {
         data: permissions.map((permission) => ({
           roleId,
           permissionId: permission.id,
-          scope: role.name === 'ADMIN' ? 'ALL' : scopeByKey.get(permission.key) === 'BRANCH'
+          scope: role.code === 'admin' ? 'ALL' : scopeByKey.get(permission.key) === 'BRANCH'
             ? 'BRANCH'
             : scopeByKey.get(permission.key) === 'SELF' ? 'SELF' : 'ALL',
         })),
@@ -72,13 +72,9 @@ export class RbacService {
   async updateRole(roleId: string, dto: UpdateRoleDto) {
     const role = await this.prisma.role.findUnique({ where: { id: roleId } });
     if (!role) throw new NotFoundException('Role not found');
-    const name = dto.name?.trim().toUpperCase();
-    if (role.isSystem && name && name !== role.name) {
-      throw new BadRequestException('System role code cannot be changed');
-    }
-    if (name && name !== role.name) {
-      const existing = await this.prisma.role.findUnique({ where: { name }, select: { id: true } });
-      if (existing) throw new BadRequestException('Role already exists');
+    const name = dto.name?.trim();
+    if (role.code === 'admin' && name && name !== role.name) {
+      throw new BadRequestException('The ADMIN role name cannot be changed');
     }
     return this.prisma.role.update({
       where: { id: roleId },
@@ -89,15 +85,50 @@ export class RbacService {
   async deleteRole(roleId: string) {
     const role = await this.prisma.role.findUnique({ where: { id: roleId } });
     if (!role) throw new NotFoundException('Role not found');
-    if (role.name === 'ADMIN') throw new BadRequestException('The ADMIN role cannot be deleted');
+    if (role.code === 'admin') throw new BadRequestException('The ADMIN role cannot be deleted');
     await this.prisma.role.delete({ where: { id: roleId } });
     return { success: true };
   }
 
   listAssignmentRules() {
     return this.prisma.roleAssignmentRule.findMany({
-      include: { role: { select: { id: true, name: true } } },
+      include: { role: { select: { id: true, code: true, name: true } } },
       orderBy: [{ name: 'asc' }, { createdAt: 'asc' }],
+    });
+  }
+
+  async setRoleAssignmentRule(roleId: string, dto: SetRoleAssignmentRuleDto, actorId: string) {
+    const role = await this.prisma.role.findUnique({ where: { id: roleId }, select: { id: true, code: true, name: true } });
+    if (!role) throw new NotFoundException('Role not found');
+    if (role.code === 'admin') throw new BadRequestException('ADMIN is assigned explicitly and cannot be assigned by an automatic rule');
+
+    const departmentId = dto.departmentId || null;
+    const positionId = dto.positionId || null;
+    if (departmentId) {
+      const department = await this.prisma.department.findUnique({ where: { id: departmentId }, select: { id: true } });
+      if (!department) throw new BadRequestException('A selected department does not exist');
+    }
+    if (positionId) {
+      const position = await this.prisma.position.findUnique({ where: { id: positionId }, select: { id: true, departmentId: true } });
+      if (!position || (departmentId && position.departmentId !== departmentId)) {
+        throw new BadRequestException('The selected position does not belong to the selected department');
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.roleAssignmentRule.deleteMany({ where: { roleId } });
+      if (departmentId || positionId) {
+        await tx.roleAssignmentRule.create({
+          data: { name: role.name, roleId, departmentId, positionId, isActive: true },
+        });
+      }
+      await this.roleAssignments.syncAll(tx);
+    });
+    await this.audit.record({ action: 'UPDATE', entity: 'RoleAssignmentRule', entityId: roleId, after: { departmentId, positionId }, ctx: { actorId } });
+    return this.prisma.roleAssignmentRule.findMany({
+      where: { roleId },
+      include: { role: { select: { id: true, code: true, name: true } } },
+      orderBy: { createdAt: 'asc' },
     });
   }
 
@@ -109,12 +140,12 @@ export class RbacService {
     }
     const roleIds = [...new Set(rules.map((rule) => rule.roleId))];
     const [roles, departments, positions] = await Promise.all([
-      this.prisma.role.findMany({ where: { id: { in: roleIds } }, select: { id: true, name: true } }),
+      this.prisma.role.findMany({ where: { id: { in: roleIds } }, select: { id: true, code: true, name: true } }),
       this.prisma.department.findMany({ where: { id: { in: [...new Set(rules.flatMap((rule) => rule.departmentId ? [rule.departmentId] : []))] } }, select: { id: true } }),
       this.prisma.position.findMany({ where: { id: { in: [...new Set(rules.flatMap((rule) => rule.positionId ? [rule.positionId] : []))] } }, select: { id: true } }),
     ]);
     if (roles.length !== roleIds.length) throw new BadRequestException('A selected role does not exist');
-    if (roles.some((role) => role.name === 'ADMIN')) throw new BadRequestException('ADMIN is assigned explicitly and cannot be assigned by an automatic rule');
+    if (roles.some((role) => role.code === 'admin')) throw new BadRequestException('ADMIN is assigned explicitly and cannot be assigned by an automatic rule');
     if (departments.length !== new Set(rules.flatMap((rule) => rule.departmentId ? [rule.departmentId] : [])).size ||
         positions.length !== new Set(rules.flatMap((rule) => rule.positionId ? [rule.positionId] : [])).size) {
       throw new BadRequestException('A selected department or position does not exist');

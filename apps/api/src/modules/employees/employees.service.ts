@@ -44,7 +44,7 @@ const LIST_SELECT = {
     select: { id: true, workSchedule: { select: { id: true, name: true, startTime: true, endTime: true } } },
     orderBy: [{ priority: 'desc' }, { effectiveFrom: 'desc' }],
   },
-  user: { select: { username: true, email: true, isActive: true, lastLoginAt: true, roles: { select: { role: { select: { id: true, name: true } } } } } },
+  user: { select: { username: true, email: true, isActive: true, lastLoginAt: true, roles: { select: { role: { select: { id: true, code: true, name: true } } } } } },
 } satisfies Prisma.EmployeeSelect;
 
 const SORTABLE = new Set(['fullName', 'employeeNo', 'joinDate', 'createdAt', 'workStatus']);
@@ -246,7 +246,7 @@ export class EmployeesService implements OnModuleInit, OnModuleDestroy {
           include: { workSchedule: { select: { id: true, name: true, startTime: true, endTime: true } } },
           orderBy: [{ priority: 'desc' }, { effectiveFrom: 'desc' }],
         },
-        user: { select: { id: true, username: true, email: true, phone: true, isActive: true, lastLoginAt: true, roles: { select: { role: { select: { id: true, name: true } } } } } },
+        user: { select: { id: true, username: true, email: true, phone: true, isActive: true, lastLoginAt: true, roles: { select: { role: { select: { id: true, code: true, name: true } } } } } },
       },
     });
     if (!employee) throw new NotFoundException('Không tìm thấy nhân viên');
@@ -286,7 +286,11 @@ export class EmployeesService implements OnModuleInit, OnModuleDestroy {
       employmentHistory: employmentHistory.map((entry) => ({
         ...entry,
         changes: Array.isArray(entry.changes)
-          ? entry.changes.filter((change: any) => !['basicSalary', 'spaBonusPercent'].includes(change.field))
+          ? entry.changes.filter((change: unknown) => {
+              if (!change || typeof change !== 'object' || Array.isArray(change)) return true;
+              const field = 'field' in change ? change.field : undefined;
+              return field !== 'basicSalary' && field !== 'spaBonusPercent';
+            })
           : entry.changes,
       })).filter((entry) => !Array.isArray(entry.changes) || entry.changes.length > 0),
     };
@@ -648,7 +652,7 @@ export class EmployeesService implements OnModuleInit, OnModuleDestroy {
     currentPassword: string,
     ctx: AuditContext & { actorRoles: string[] },
   ) {
-    if (!ctx.actorRoles.includes('ADMIN')) {
+    if (!ctx.actorRoles.includes('admin')) {
       throw new ForbiddenException('Chỉ admin mới được xóa vĩnh viễn nhân viên');
     }
 
@@ -946,7 +950,6 @@ export class EmployeesService implements OnModuleInit, OnModuleDestroy {
     if (usernameTaken) throw new BadRequestException('Tên đăng nhập đã được sử dụng bởi tài khoản khác');
     if (phoneTaken) throw new BadRequestException('Số điện thoại đã được sử dụng bởi tài khoản khác');
 
-    const role = await db.role.findUnique({ where: { name: 'EMPLOYEE' } });
     const user = await db.user.create({
       data: {
         username: normalizedUsername,
@@ -956,7 +959,6 @@ export class EmployeesService implements OnModuleInit, OnModuleDestroy {
         mustChangePassword: password === '123456',
         fullName,
         isActive: true,
-        roles: role ? { create: { roleId: role.id } } : undefined,
       },
     });
     return user.id;
@@ -1120,11 +1122,11 @@ export class EmployeesService implements OnModuleInit, OnModuleDestroy {
   private async ensureNotLastActiveSuperAdmin(db: Prisma.TransactionClient, userId: string) {
     const user = await db.user.findUnique({
       where: { id: userId },
-      select: { isActive: true, roles: { include: { role: { select: { name: true } } } } },
+      select: { isActive: true, roles: { include: { role: { select: { code: true } } } } },
     });
-    if (!user?.isActive || !user.roles.some(({ role }) => role.name === 'ADMIN')) return;
+    if (!user?.isActive || !user.roles.some(({ role }) => role.code === 'admin')) return;
     const activeAdmins = await db.user.count({
-      where: { isActive: true, deletedAt: null, roles: { some: { role: { name: 'ADMIN' } } } },
+      where: { isActive: true, deletedAt: null, roles: { some: { role: { code: 'admin' } } } },
     });
     if (activeAdmins <= 1) throw new BadRequestException('Không thể vô hiệu hóa chủ cửa hàng đang hoạt động cuối cùng');
   }

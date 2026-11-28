@@ -22,6 +22,8 @@ import { SettingsModule } from './modules/settings/settings.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { PayrollModule } from './modules/payroll/payroll.module';
 import { CandidatesModule } from './modules/candidates/candidates.module';
+import { SecurityModule } from './modules/security/security.module';
+import { IpSecurityGuard } from './modules/security/ip-security.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 
@@ -54,9 +56,11 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     IntegrationsModule,
     PayrollModule,
     CandidatesModule,
+    SecurityModule,
   ],
   providers: [
     // Order matters: throttle → authenticate → authorize.
+    { provide: APP_GUARD, useClass: IpSecurityGuard },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },

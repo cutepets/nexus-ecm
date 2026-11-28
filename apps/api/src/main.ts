@@ -3,6 +3,7 @@ import { ValidationPipe, Logger } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import helmet from "helmet";
 import { json, urlencoded } from "express";
+import type { IncomingMessage } from "node:http";
 import { AppModule } from "./app.module";
 import { PrismaService } from "./core/prisma/prisma.service";
 import { assertProductionSecurityConfig } from "./core/config/production-security";
@@ -16,8 +17,19 @@ async function bootstrap() {
   // Audit photos are captured at a reviewable resolution. Keep a bounded
   // payload limit rather than the default Express limit, which is too small
   // for those JPEG data URLs.
-  app.use(json({ limit: "4mb" }));
-  app.use(urlencoded({ extended: true, limit: "4mb" }));
+  const isStorageUpload = (request: IncomingMessage) =>
+    request.url?.split("?", 1)[0].endsWith("/storage/upload") ?? false;
+  const contentType = (request: IncomingMessage) =>
+    (request.headers["content-type"] ?? "").split(";", 1)[0].trim().toLowerCase();
+  app.use(json({
+    limit: "4mb",
+    type: (request: IncomingMessage) => !isStorageUpload(request) && (contentType(request) === "application/json" || contentType(request).endsWith("+json")),
+  }));
+  app.use(urlencoded({
+    extended: true,
+    limit: "4mb",
+    type: (request: IncomingMessage) => !isStorageUpload(request) && contentType(request) === "application/x-www-form-urlencoded",
+  }));
 
   // API needs only a restrictive CSP; the web CSP is set at its reverse proxy.
   app.use(
@@ -33,13 +45,13 @@ async function bootstrap() {
   );
 
   if (process.env.NODE_ENV === "production") {
-    app.getHttpAdapter().getInstance().set("trust proxy", 1);
+    const proxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 0);
+    if (!Number.isInteger(proxyHops) || proxyHops < 0 || proxyHops > 5) {
+      throw new Error("TRUST_PROXY_HOPS must be an integer from 0 to 5");
+    }
+    app.getHttpAdapter().getInstance().set("trust proxy", proxyHops || false);
     app.use((request, response, next) => {
-      if (
-        request.protocol === "https" ||
-        request.headers["x-forwarded-proto"] === "https"
-      )
-        return next();
+      if (request.secure) return next();
       return response
         .status(400)
         .json({ statusCode: 400, message: "HTTPS_REQUIRED" });

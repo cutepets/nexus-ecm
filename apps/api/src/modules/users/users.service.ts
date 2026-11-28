@@ -19,7 +19,7 @@ const userWithRoles = {
 type UserWithRoles = Prisma.UserGetPayload<{ include: typeof userWithRoles }>;
 
 const ACCOUNT_INCLUDE = {
-  roles: { include: { role: { select: { id: true, name: true, description: true } } } },
+  roles: { include: { role: { select: { id: true, code: true, name: true, description: true } } } },
   employee: { select: { id: true, employeeNo: true, fullName: true } },
 } satisfies Prisma.UserInclude;
 
@@ -267,7 +267,11 @@ export class UsersService {
     const before = await this.requireAccount(id);
     if (!isActive && ctx.actorId === id) throw new BadRequestException('You cannot deactivate your own account');
     if (!isActive) await this.ensureSuperAdminRemains(before);
-    const user = await this.prisma.user.update({ where: { id }, data: { isActive }, include: ACCOUNT_INCLUDE });
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: { isActive },
+      include: ACCOUNT_INCLUDE,
+    });
     await this.revokeActiveSessions(id);
     await this.audit.record({ action: 'UPDATE', entity: 'User', entityId: id, before: this.auditSnapshot(before), after: this.auditSnapshot(user), ctx });
     return this.toAccount(user);
@@ -287,7 +291,7 @@ export class UsersService {
   async setAccountRoles(id: string, roleIds: string[], ctx: AuditContext) {
     const before = await this.requireAccount(id);
     const roles = await this.requireRoles(roleIds);
-    const willRemainAdmin = roles.some((role) => role.name === 'ADMIN');
+    const willRemainAdmin = roles.some((role) => role.code === 'admin');
     if (!willRemainAdmin) await this.ensureSuperAdminRemains(before);
     const user = await this.prisma.$transaction(async (tx) => {
       await tx.userRole.deleteMany({ where: { userId: id } });
@@ -332,7 +336,7 @@ export class UsersService {
 
   /** Flattens nested role/permission relations into string arrays. */
   private async resolve(user: UserWithRoles): Promise<ResolvedUser> {
-    const roles = user.roles.map((ur) => ur.role.name);
+    const roles = user.roles.map((ur) => ur.role.code);
     const scopeRank = { SELF: 1, BRANCH: 2, ALL: 3 } as const;
     const scopeMap = user.roles.flatMap((ur) => ur.role.permissions.map((rp) => [rp.permission.key, rp.scope] as const))
       .reduce((merged, [key, scope]) => {
@@ -340,7 +344,7 @@ export class UsersService {
         if (!current || scopeRank[scope] > scopeRank[current]) merged.set(key, scope);
         return merged;
       }, new Map<string, 'ALL' | 'BRANCH' | 'SELF'>());
-    if (roles.includes('ADMIN')) {
+    if (roles.includes('admin')) {
       const catalog = await this.prisma.permission.findMany({ select: { key: true } });
       catalog.forEach(({ key }) => scopeMap.set(key, 'ALL'));
     }
@@ -411,15 +415,15 @@ export class UsersService {
 
   private async requireRoles(roleIds: string[]) {
     const uniqueRoleIds = [...new Set(roleIds)];
-    const roles = await this.prisma.role.findMany({ where: { id: { in: uniqueRoleIds } }, select: { id: true, name: true } });
+    const roles = await this.prisma.role.findMany({ where: { id: { in: uniqueRoleIds } }, select: { id: true, code: true, name: true } });
     if (roles.length !== uniqueRoleIds.length) throw new BadRequestException('One or more roles were not found');
     return roles;
   }
 
   private async ensureSuperAdminRemains(account: AccountUser) {
-    if (!account.isActive || !account.roles.some(({ role }) => role.name === 'ADMIN')) return;
+    if (!account.isActive || !account.roles.some(({ role }) => role.code === 'admin')) return;
     const activeAdmins = await this.prisma.user.count({
-      where: { deletedAt: null, isActive: true, roles: { some: { role: { name: 'ADMIN' } } } },
+      where: { deletedAt: null, isActive: true, roles: { some: { role: { code: 'admin' } } } },
     });
     if (activeAdmins <= 1) throw new BadRequestException('The last active store admin cannot be changed');
   }
@@ -454,7 +458,7 @@ export class UsersService {
       phone: user.phone,
       fullName: user.fullName,
       isActive: user.isActive,
-      roles: user.roles.map(({ role }) => role.name),
+      roles: user.roles.map(({ role }) => role.code),
     };
   }
 }

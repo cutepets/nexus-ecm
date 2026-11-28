@@ -12,14 +12,14 @@ export interface RequestUser {
 
 /** True when the user may manage others' data (not a self-service-only employee). */
 export function isPrivileged(user: RequestUser, managePermission: string): boolean {
-  if (user.roles.includes('ADMIN')) return true;
+  if (user.roles.includes('admin')) return true;
   const scope = user.permissionScopes?.[managePermission];
   if (scope) return scope === 'ALL';
   return user.permissions.includes(managePermission);
 }
 
 export function permissionScope(user: RequestUser, permission: string): 'ALL' | 'BRANCH' | 'SELF' | 'NONE' {
-  if (user.roles.includes('ADMIN')) return 'ALL';
+  if (user.roles.includes('admin')) return 'ALL';
   return user.permissionScopes?.[permission] ?? (user.permissions.includes(permission) ? 'ALL' : 'NONE');
 }
 

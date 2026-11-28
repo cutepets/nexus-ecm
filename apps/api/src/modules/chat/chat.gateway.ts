@@ -12,6 +12,8 @@ import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
 import { SendMessageDto } from './dto/chat.dto';
+import { GeoIpCountryService } from '../security/geoip-country.service';
+import { IpSecurityService } from '../security/ip-security.service';
 
 interface AuthedSocket extends Socket {
   userId?: string;
@@ -31,10 +33,26 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private readonly chat: ChatService,
     private readonly jwt: JwtService,
+    private readonly geoIp: GeoIpCountryService,
+    private readonly ipSecurity: IpSecurityService,
   ) {}
 
   async handleConnection(client: AuthedSocket) {
     try {
+      const trustedProxyHops = process.env.NODE_ENV === 'production' ? Number(process.env.TRUST_PROXY_HOPS ?? 0) : 0;
+      const forwarded = client.handshake.headers['x-forwarded-for'];
+      const forwardedIps = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+      const ip = trustedProxyHops > 0
+        ? forwardedIps[forwardedIps.length - trustedProxyHops]
+        : client.handshake.address;
+      if (!ip) throw new Error('Client IP unavailable');
+      await this.ipSecurity.assertIpAllowed(ip);
+      const clientAddress = ip.replace(/^::ffff:/i, '');
+      const loopback = clientAddress === '::1' || clientAddress.startsWith('127.');
+      if (!loopback && this.geoIp.isCountryFilteringEnabled()) {
+        const country = this.geoIp.countryCode(clientAddress);
+        if (country !== 'VN') throw new Error('Client IP is not allowed');
+      }
       const token = client.handshake.auth?.token ?? client.handshake.headers.authorization?.replace('Bearer ', '');
       const payload = await this.jwt.verifyAsync(token, { secret: process.env.JWT_ACCESS_SECRET });
       client.userId = payload.sub;

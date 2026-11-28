@@ -320,7 +320,7 @@ export default function KaryawanPage() {
         ),
       }] : []),
     ],
-    [canEnrollFace, canReadPayroll, isUpcomingExitFilter],
+    [canEnrollFace, canReadPayroll],
   );
 
   return (

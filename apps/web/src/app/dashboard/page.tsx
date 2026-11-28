@@ -16,7 +16,7 @@ import { useLeaveBalances, useLeaveRequests } from '@/features/leave/api';
 import { useWorkRoster, type RosterEntry } from '@/features/attendance/work-roster-api';
 
 export default function DashboardPage() {
-  const canSeeCompany = useAuthStore((s) => s.hasPermission('employee:read'));
+  const canSeeCompany = useAuthStore((s) => s.hasPermission('dashboard:read'));
   return canSeeCompany ? <CompanyDashboard /> : <PersonalDashboard />;
 }
 

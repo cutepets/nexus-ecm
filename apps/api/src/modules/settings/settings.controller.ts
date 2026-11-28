@@ -6,12 +6,16 @@ import {
   Param,
   Post,
   Put,
+  Query,
+  Res,
 } from "@nestjs/common";
+import type { Response } from "express";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import {
   CurrentUser,
   RequestUser,
 } from "../../common/decorators/current-user.decorator";
+import { Public } from "../../common/decorators/public.decorator";
 import { RequirePermissions } from "../../common/decorators/require-permissions.decorator";
 import {
   CreateBranchDto,
@@ -39,6 +43,7 @@ export class SettingsController {
   }
 
   @Get("branding")
+  @Public()
   @ApiOperation({
     summary: "Read safe company brand identity for the application shell",
   })
@@ -54,6 +59,67 @@ export class SettingsController {
     @CurrentUser() user: RequestUser,
   ) {
     return this.settings.updateCompany(dto, { actorId: user.id });
+  }
+
+  @Get("storage")
+  @RequirePermissions("settings:read")
+  @ApiOperation({ summary: "Read storage provider and Google Drive connection state" })
+  getStorageSettings() {
+    return this.settings.getStorageSettings();
+  }
+
+  @Put("storage/google-drive/oauth")
+  @RequirePermissions("settings:update")
+  @ApiOperation({ summary: "Save Google OAuth settings for a personal Google account" })
+  updateGoogleDriveOAuthSettings(
+    @Body() dto: { clientId: string; clientSecret?: string; folderId: string },
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.settings.updateGoogleDriveOAuthSettings(dto, { actorId: user.id });
+  }
+
+  @Post("storage/google-drive/oauth/start")
+  @RequirePermissions("settings:update")
+  @ApiOperation({ summary: "Start Google Drive OAuth authorization" })
+  startGoogleDriveOAuth() {
+    return this.settings.startGoogleDriveOAuth();
+  }
+
+  @Get("storage/google-drive/oauth/callback")
+  @Public()
+  @ApiOperation({ summary: "Complete Google Drive OAuth authorization" })
+  async completeGoogleDriveOAuth(
+    @Query("state") state: string,
+    @Query("code") code: string,
+    @Query("error") oauthError: string,
+    @Res() response: Response,
+  ) {
+    let webUrl = process.env.WEB_URL?.trim() || "http://localhost:3100";
+    while (webUrl.endsWith("/")) webUrl = webUrl.slice(0, -1);
+    let result = "error";
+    if (!oauthError) {
+      try {
+        await this.settings.completeGoogleDriveOAuth(state, code);
+        result = "success";
+      } catch {
+        result = "error";
+      }
+    }
+    return response.redirect(`${webUrl}/dashboard/pengaturan?section=storage&drive_oauth=${result}`);
+  }
+
+  @Post("storage/google-drive/test")
+  @RequirePermissions("settings:update")
+  @ApiOperation({ summary: "Test Google Drive folder read and write access" })
+  testGoogleDriveConnection(@CurrentUser() user: RequestUser) {
+    return this.settings.testGoogleDriveConnection({ actorId: user.id });
+  }
+
+  @Put("storage/provider")
+  @RequirePermissions("settings:update")
+  @ApiOperation({ summary: "Select MinIO or Google Drive as active storage" })
+  selectStorageProvider(@Body() dto: { provider: string }, @CurrentUser() user: RequestUser) {
+    return this.settings.selectStorageProvider(dto.provider, { actorId: user.id });
   }
 
   @Get("branches")

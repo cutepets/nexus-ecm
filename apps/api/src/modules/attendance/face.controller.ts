@@ -28,7 +28,7 @@ export class FaceController {
   })
   enroll(@Body() dto: EnrollFaceDto, @CurrentUser() user: RequestUser) {
     const isSelf = user.employeeId === dto.employeeId;
-    const mayManage = user.roles.includes("ADMIN") || user.permissions.includes("attendance:face:enroll");
+    const mayManage = user.roles.includes("admin") || user.permissions.includes("attendance:face:enroll");
     if (!isSelf && !mayManage) {
       throw new ForbiddenException("Only the employee or a face manager may enroll this face");
     }
@@ -84,7 +84,7 @@ export class FaceController {
   }
 
   private requireAdmin(user: RequestUser) {
-    if (!user.roles.includes("ADMIN"))
+    if (!user.roles.includes("admin"))
       throw new ForbiddenException(
         "Chỉ chủ cửa hàng được xuất hoặc xóa dữ liệu sinh trắc",
       );

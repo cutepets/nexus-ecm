@@ -81,6 +81,7 @@ export default function CutiPage() {
 
         <TabsContent value="all">
           <DataTable
+            tableId="leave-requests-all"
             columns={baseColumns}
             data={requests ?? []}
             loading={isLoading}
@@ -93,6 +94,7 @@ export default function CutiPage() {
         {canApprove && (
           <TabsContent value="inbox">
             <DataTable
+              tableId="leave-requests-inbox"
               columns={baseColumns}
               data={inbox ?? []}
               loading={inboxLoading}

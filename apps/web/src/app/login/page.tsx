@@ -12,6 +12,8 @@ export default function LoginPage() {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+  const loginError = (login.error as { response?: { data?: { message?: string | string[] } } } | null)?.response?.data?.message;
+  const loginErrorCode = Array.isArray(loginError) ? loginError[0] : loginError;
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,7 +82,13 @@ export default function LoginPage() {
 
           {login.isError && (
             <p className="rounded-lg bg-accent-pink/15 px-3 py-2 text-sm text-pink-700">
-              Thông tin đăng nhập hoặc mật khẩu không đúng.
+              {loginErrorCode === 'ACCOUNT_DISABLED' || loginErrorCode?.includes('Tài khoản đã bị vô hiệu hóa')
+                ? 'Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ quản trị viên.'
+                : loginErrorCode === 'IP_BLOCKED' || loginErrorCode?.includes('Địa chỉ IP này đang bị chặn')
+                  ? 'Địa chỉ IP này đang bị chặn. Vui lòng liên hệ quản trị viên.'
+                  : loginErrorCode === 'VIETNAM_ONLY' || loginErrorCode?.includes('chỉ cho phép truy cập từ Việt Nam')
+                    ? 'Ứng dụng chỉ cho phép đăng nhập từ Việt Nam.'
+                    : 'Thông tin đăng nhập hoặc mật khẩu không đúng.'}
             </p>
           )}
 

@@ -23,7 +23,11 @@ export const PERMISSION_MODULES = [
 
 export type PermissionModule = (typeof PERMISSION_MODULES)[number];
 
-export const DEFAULT_ROLES = ['ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'] as const;
+export const DEFAULT_ROLES = ['admin'] as const;
+export const ROLE_SUGGESTIONS = [
+  { code: 'employee', name: 'Nhân viên' },
+  { code: 'manager', name: 'Quản lý' },
+] as const;
 export type DefaultRole = (typeof DEFAULT_ROLES)[number];
 
 /** Helper to build a permission key, e.g. perm('employee', 'create') -> 'employee:create' */

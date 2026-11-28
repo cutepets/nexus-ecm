@@ -54,7 +54,7 @@ export interface EmployeeListItem {
   joinDate: string;
   department?: Pick<Department, 'id' | 'name' | 'code'> | null;
   position?: Pick<Position, 'id' | 'title'> | null;
-  user?: { username: string; email: string; isActive: boolean; lastLoginAt?: string | null; roles: { role: { id: string; name: string } }[] } | null;
+  user?: { username: string; email: string; isActive: boolean; lastLoginAt?: string | null; roles: { role: { id: string; code: string; name: string } }[] } | null;
 }
 
 export interface JobHistoryEntry {
@@ -102,5 +102,5 @@ export interface EmployeeDetail extends EmployeeListItem {
   documents: EmployeeDocument[];
   createdAt: string;
   updatedAt: string;
-  user?: { id: string; username: string; email: string; phone?: string | null; isActive: boolean; lastLoginAt?: string | null; roles: { role: { id: string; name: string } }[] } | null;
+  user?: { id: string; username: string; email: string; phone?: string | null; isActive: boolean; lastLoginAt?: string | null; roles: { role: { id: string; code: string; name: string } }[] } | null;
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { Sidebar } from '@/components/shell/sidebar';
@@ -11,19 +11,24 @@ import { CommandPalette } from '@/components/shell/command-palette';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api-client';
 import { PasswordOnboardingDialog } from '@/features/auth/password-onboarding-dialog';
+import { canAccessNavItem, findNavItemForPath } from '@/lib/nav';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const accessToken = useAuthStore((s) => s.accessToken);
+  const hasPermission = useAuthStore((s) => s.hasPermission);
   const [hydrated, setHydrated] = useState(() => useAuthStore.persist.hasHydrated());
+  const routeItem = findNavItemForPath(pathname);
+  const canViewRoute = !routeItem || canAccessNavItem(routeItem, hasPermission);
   const database = useQuery({
     queryKey: ['system', 'database-health'],
     queryFn: async () => (await api.get<{ db: 'up' | 'down' }>('/health/ready', { timeout: 3000 })).data,
-    enabled: hydrated && Boolean(accessToken),
+    enabled: hydrated && Boolean(accessToken) && canViewRoute,
     retry: 0,
-    staleTime: 0,
-    refetchInterval: 3000,
-    refetchIntervalInBackground: true,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
 
@@ -56,6 +61,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => window.clearTimeout(fallback);
   }, [accessToken, hydrated, router]);
 
+  useEffect(() => {
+    if (hydrated && accessToken && !canViewRoute) router.replace('/dashboard');
+  }, [accessToken, canViewRoute, hydrated, router]);
+
   if (!hydrated) {
     return (
       <main className="flex min-h-screen items-center justify-center p-6" aria-live="polite">
@@ -75,6 +84,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
+  if (!canViewRoute) return null;
+
   if (database.isLoading && !database.data) {
     return <main className="flex min-h-screen items-center justify-center p-6"><p className="text-sm text-ink-muted">Đang kiểm tra kết nối cơ sở dữ liệu…</p></main>;
   }
@@ -92,13 +103,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-dvh min-h-0 overflow-hidden">
       <Sidebar />
       <CommandPalette />
       <PasswordOnboardingDialog />
-      <div className="flex-1 md:ml-60">
+      <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden md:ml-60">
         <Topbar />
-        <main className="w-full p-6">{children}</main>
+        <main className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
+          {children}
+        </main>
       </div>
     </div>
   );

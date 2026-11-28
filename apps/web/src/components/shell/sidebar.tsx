@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS } from "@/lib/nav";
+import { canAccessNavItem, NAV_ITEMS } from "@/lib/nav";
 import { useAuthStore } from "@/stores/auth-store";
 import { useCompanyBranding } from "@/features/settings/api";
 
@@ -14,7 +14,7 @@ export function Sidebar() {
   const { data: branding } = useCompanyBranding();
 
   const items = NAV_ITEMS.filter(
-    (i) => !i.permission || hasPermission(i.permission),
+    (item) => canAccessNavItem(item, hasPermission),
   );
 
   return (
@@ -30,6 +30,7 @@ export function Sidebar() {
             width={36}
             height={36}
             sizes="36px"
+            unoptimized
             className="size-9 shrink-0 rounded-xl border border-border bg-card object-contain"
           />
         ) : (
@@ -43,7 +44,7 @@ export function Sidebar() {
       </Link>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
-        {items.map((item) => {
+        {items.map((item, index) => {
           // Dashboard root must match exactly; modules match by prefix.
           const active =
             item.href === "/dashboard"
@@ -55,7 +56,7 @@ export function Sidebar() {
               href={item.href}
               className={cn(
                 "flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors",
-                item.separatorBefore && "mt-3 border-t border-border pt-4",
+                item.separatorBefore && index > 0 && "mt-3 border-t border-border pt-4",
                 active
                   ? item.href === "/dashboard/absensi"
                     ? "bg-accent-purple/15 font-semibold text-purple-900 ring-1 ring-accent-purple/30"

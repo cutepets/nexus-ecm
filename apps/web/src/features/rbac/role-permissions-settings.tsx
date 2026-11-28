@@ -13,21 +13,21 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
+import { ROLE_SUGGESTIONS } from "@nexus/shared";
 import {
   useCreateRole,
   useDeleteRole,
   usePermissions,
   useRoles,
   useSetRolePermissions,
-  useReplaceRoleAssignmentRules,
+  useSetRoleAssignmentRule,
   useRoleAssignmentRules,
   useUpdateRole,
   type Role,
-  type RoleAssignmentRule,
   type PermissionScope,
 } from "@/features/rbac/api";
 import { useAuthStore } from "@/stores/auth-store";
-import { RoleAssignmentRulesSettings } from "./role-assignment-rules-settings";
+import { RoleAssignmentRulesSettings, type RoleAssignmentConditions } from "./role-assignment-rules-settings";
 
 const crudRows = (prefix: string, subject: string, compact = false) => [
   { label: compact ? "Tạo" : `Tạo ${subject}`, matches: (key: string) => key === `${prefix}:create` },
@@ -108,36 +108,38 @@ function supportedScope(key: string, scope: PermissionScope | undefined): Permis
   return optionsForPermission(key).some((option) => option.value === scope) ? scope! : "NONE";
 }
 
-function roleDisplayName(name: string) {
-  return ({ ADMIN: "Quản trị viên", HR: "Nhân sự", MANAGER: "Quản lý", EMPLOYEE: "Nhân viên" } as Record<string, string>)[name] ?? name;
-}
-
 export function RolePermissionsSettings() {
   const hasPermission = useAuthStore((state) => state.hasPermission);
   const { data: roles } = useRoles();
   const { data: permissions } = usePermissions();
   const createRole = useCreateRole();
   const updateRole = useUpdateRole();
-  const { data: assignmentRules, isLoading: assignmentRulesLoading } = useRoleAssignmentRules();
-  const replaceAssignmentRules = useReplaceRoleAssignmentRules();
+  const { data: assignmentRules, isLoading: assignmentRulesLoading, isError: assignmentRulesError, refetch: refetchAssignmentRules } = useRoleAssignmentRules();
+  const saveAssignmentRule = useSetRoleAssignmentRule();
   const savePermissions = useSetRolePermissions();
   const deleteRole = useDeleteRole();
   const [selected, setSelected] = useState<Role | null>(null);
   const [selectedScopes, setSelectedScopes] = useState<Record<string, PermissionScope>>({});
   const [savedScopes, setSavedScopes] = useState<Record<string, PermissionScope>>({});
-  const [selectedRoleRules, setSelectedRoleRules] = useState<Omit<RoleAssignmentRule, "id" | "role">[]>([]);
+  const [pendingRuleConditions, setPendingRuleConditions] = useState<RoleAssignmentConditions>({ departmentId: null, positionId: null });
   const [pendingRole, setPendingRole] = useState<Role | null>(null);
   const [isCreatingRole, setIsCreatingRole] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const canManageAssignmentRules = hasPermission("rbac:update") && hasPermission("rbac:read");
   useEffect(() => {
-    if (!selected && roles?.[0]) setSelected(roles[0]);
+    if (!selected && roles?.length) {
+      const savedRoleId = window.localStorage.getItem("nexus-rbac-selected-role");
+      setSelected(roles.find((role) => role.id === savedRoleId) ?? roles[0]);
+    }
   }, [roles, selected]);
+  useEffect(() => {
+    if (selected?.id) window.localStorage.setItem("nexus-rbac-selected-role", selected.id);
+  }, [selected?.id]);
   useEffect(
     () => {
       const scopes = Object.fromEntries(
-        selected?.permissions.map(({ permission, scope }) => [permission.key, selected.name === "ADMIN" ? "ALL" : supportedScope(permission.key, scope)]) ?? [],
+        selected?.permissions.map(({ permission, scope }) => [permission.key, selected.code === "admin" ? "ALL" : supportedScope(permission.key, scope)]) ?? [],
       );
       setSelectedScopes(scopes);
       setSavedScopes(scopes);
@@ -146,11 +148,8 @@ export function RolePermissionsSettings() {
   );
   useEffect(() => {
     if (isCreatingRole) return;
-    setSelectedRoleRules(
-      (assignmentRules ?? [])
-        .filter((rule) => rule.roleId === selected?.id)
-        .map(({ id, role, ...rule }) => rule),
-    );
+    const rule = assignmentRules?.find((item) => item.roleId === selected?.id);
+    setPendingRuleConditions({ departmentId: rule?.departmentId ?? null, positionId: rule?.positionId ?? null });
   }, [assignmentRules, isCreatingRole, selected?.id]);
   const grouped = useMemo(
     () => permissionGroups.map((group) => ({
@@ -164,29 +163,26 @@ export function RolePermissionsSettings() {
   );
   const submitEdit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (canManageAssignmentRules && (isCreatingRole || selected?.name !== "ADMIN") && !assignmentRules) return;
+    if (canManageAssignmentRules && (isCreatingRole || selected?.code !== "admin") && !assignmentRules) return;
     const form = new FormData(event.currentTarget);
-    const name = isCreatingRole
-      ? String(form.get("name")).trim().toUpperCase()
-      : selected?.isSystem ? selected.name : String(form.get("name")).trim().toUpperCase();
-    if (!name || (!isCreatingRole && !selected)) return;
+    const code = isCreatingRole ? String(form.get("code")).trim() : selected?.code;
+    const name = String(form.get("name")).trim();
+    if (!name || (isCreatingRole && !code) || (!isCreatingRole && !selected)) return;
     if (isCreatingRole) {
       try {
-        const created = await createRole.mutateAsync({ name });
-        const newRules = selectedRoleRules.map((rule) => ({ ...rule, name, roleId: created.id }));
+        const created = await createRole.mutateAsync({ code: code!, name });
         const placeholderRole: Role = {
           id: created.id,
-          name,
+          code: created.code,
+          name: created.name,
           isSystem: false,
           permissions: [],
           _count: { users: 0 },
         };
         setSelected(placeholderRole);
         setIsCreatingRole(false);
-        setSelectedRoleRules(newRules);
-        if (canManageAssignmentRules && newRules.length && assignmentRules) {
-          const existingRules = assignmentRules.map(({ id, role, ...rule }) => rule);
-          await replaceAssignmentRules.mutateAsync([...existingRules, ...newRules]);
+        if (canManageAssignmentRules && (pendingRuleConditions.departmentId || pendingRuleConditions.positionId)) {
+          await saveAssignmentRule.mutateAsync({ roleId: created.id, ...pendingRuleConditions });
         }
         setEditOpen(false);
       } catch {
@@ -195,30 +191,22 @@ export function RolePermissionsSettings() {
       return;
     }
     if (!selected) return;
-    const saves: Promise<unknown>[] = [
-      updateRole.mutateAsync({ id: selected.id, name }),
-    ];
-    if (canManageAssignmentRules && selected.name !== "ADMIN") {
-      if (!assignmentRules) return;
-      const otherRoleRules = assignmentRules
-        .filter((rule) => rule.roleId !== selected.id)
-        .map(({ id, role, ...rule }) => rule);
-      const currentRoleRules = selectedRoleRules.map((rule) => ({
-        ...rule,
-        name,
-        roleId: selected.id,
-      }));
-      saves.push(replaceAssignmentRules.mutateAsync([...otherRoleRules, ...currentRoleRules]));
-    }
-    Promise.all(saves).then(() => {
+    try {
+      if (name !== selected.name) await updateRole.mutateAsync({ id: selected.id, name });
+      if (canManageAssignmentRules && selected.code !== "admin") {
+        if (!assignmentRules) return;
+        await saveAssignmentRule.mutateAsync({ roleId: selected.id, ...pendingRuleConditions });
+      }
       setSelected((role) => (role ? { ...role, name } : role));
       setEditOpen(false);
-    }).catch(() => undefined);
+    } catch {
+      return;
+    }
   };
   const canUpdate = hasPermission("rbac:update");
   const canCreate = hasPermission("rbac:create");
   const canDelete = hasPermission("rbac:delete");
-  const canEditSelectedPermissions = canUpdate && selected?.name !== "ADMIN";
+  const canEditSelectedPermissions = canUpdate && selected?.code !== "admin";
   const hasPermissionChanges = (permissions ?? []).some(({ key }) =>
     supportedScope(key, selectedScopes[key]) !== supportedScope(key, savedScopes[key]),
   );
@@ -231,7 +219,7 @@ export function RolePermissionsSettings() {
         {canCreate && (
           <Button size="sm" onClick={() => {
             setIsCreatingRole(true);
-            setSelectedRoleRules([]);
+            setPendingRuleConditions({ departmentId: null, positionId: null });
             setEditOpen(true);
           }}>
             <Plus /> Thêm vai trò
@@ -254,7 +242,7 @@ export function RolePermissionsSettings() {
               className={`w-full rounded-xl border px-3 py-2.5 text-left transition-colors ${selected?.id === role.id ? "border-accent-purple bg-accent-purple/10" : "border-border bg-card hover:bg-canvas"}`}
             >
               <div className="flex justify-between gap-2">
-                <span className="font-medium">{roleDisplayName(role.name)}</span>
+                <span className="font-medium">{role.name}</span>
                 {role.isSystem && <Badge tone="neutral">Hệ thống</Badge>}
               </div>
               <p className="mt-1 text-xs text-ink-muted">
@@ -268,7 +256,8 @@ export function RolePermissionsSettings() {
             <>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h2 className="font-medium">{roleDisplayName(selected.name)}</h2>
+                  <h2 className="font-medium">{selected.name}</h2>
+                  <p className="mt-1 text-xs text-ink-muted">Mã: {selected.code}</p>
                 </div>
                 <div className="flex gap-2">
                   {canUpdate && (
@@ -280,7 +269,7 @@ export function RolePermissionsSettings() {
                       <Pencil /> Sửa
                     </Button>
                   )}
-                  {selected.name !== "ADMIN" && canDelete && (
+                  {selected.code !== "admin" && canDelete && (
                     <Button
                       variant="danger"
                       size="sm"
@@ -300,7 +289,7 @@ export function RolePermissionsSettings() {
                     </div>
                     <div className="divide-y divide-border px-4">
                       {group.rows.map(({ label, keys }) => {
-                        const scopes = [...new Set(keys.map((key) => selected.name === "ADMIN" ? "ALL" : supportedScope(key, selectedScopes[key])))];
+                        const scopes = [...new Set(keys.map((key) => selected.code === "admin" ? "ALL" : supportedScope(key, selectedScopes[key])))];
                         const scope = scopes.length === 1 ? scopes[0] : "MIXED";
                         const options = optionsForPermission(keys[0]);
                         return (
@@ -368,7 +357,7 @@ export function RolePermissionsSettings() {
       <ConfirmDeleteDialog
         open={deleteOpen}
         title="Xóa vai trò"
-        description={`Xóa vai trò ${selected ? roleDisplayName(selected.name) : ""}?`}
+        description={`Xóa vai trò ${selected?.name ?? ""}?`}
         pending={deleteRole.isPending}
         onOpenChange={setDeleteOpen}
         onConfirm={() => {
@@ -405,25 +394,52 @@ export function RolePermissionsSettings() {
         <DialogContent className="max-h-[90vh] overflow-y-auto p-6">
           <DialogTitle>{isCreatingRole ? "Thêm vai trò" : "Sửa vai trò"}</DialogTitle>
           <form
+            data-role-form="true"
             key={isCreatingRole ? "new-role" : selected?.id}
             className="mt-5 space-y-4"
             onSubmit={submitEdit}
           >
             <Input
+              name="code"
+              required
+              pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+              defaultValue={isCreatingRole ? "" : selected?.code}
+              placeholder="mã-vai-tro"
+              disabled={!isCreatingRole}
+              autoCapitalize="none"
+            />
+            {isCreatingRole && <div className="flex flex-wrap gap-2">{ROLE_SUGGESTIONS.map((suggestion) => <Button key={suggestion.code} type="button" variant="secondary" size="sm" onClick={() => {
+              const form = document.querySelector<HTMLFormElement>('[data-role-form="true"]');
+              if (!form) return;
+              const codeInput = form.elements.namedItem("code") as HTMLInputElement | null;
+              const nameInput = form.elements.namedItem("name") as HTMLInputElement | null;
+              if (codeInput) codeInput.value = suggestion.code;
+              if (nameInput) nameInput.value = suggestion.name;
+            }}>{suggestion.name}</Button>)}</div>}
+            <Input
               name="name"
               required
-              pattern="[A-Za-z0-9_-]{2,40}"
+              minLength={2}
               defaultValue={isCreatingRole ? "" : selected?.name}
-              autoCapitalize="characters"
-              disabled={!isCreatingRole && selected?.isSystem}
+              placeholder="Tên hiển thị"
+              disabled={!isCreatingRole && selected?.code === "admin"}
             />
-            {canManageAssignmentRules && (isCreatingRole || selected?.name !== "ADMIN") && (
-              <RoleAssignmentRulesSettings
-                key={selected?.id ?? "new-role"}
-                roleId={selected?.id ?? "new-role"}
-                roleRules={selectedRoleRules}
-                onChange={setSelectedRoleRules}
-              />
+            {canManageAssignmentRules && (isCreatingRole || selected?.code !== "admin") && (
+              <>
+                <RoleAssignmentRulesSettings
+                  key={selected?.id ?? "new-role"}
+                  conditions={pendingRuleConditions}
+                  onConditionsChange={setPendingRuleConditions}
+                />
+                {assignmentRulesError && (
+                  <p className="text-sm text-red-600" role="alert">
+                    Không tải được điều kiện vai trò, chưa thể lưu.{' '}
+                    <button type="button" className="underline" onClick={() => void refetchAssignmentRules()}>
+                      Thử tải lại
+                    </button>
+                  </p>
+                )}
+              </>
             )}
             <div className="flex justify-end gap-2">
               <DialogClose asChild>
@@ -431,7 +447,7 @@ export function RolePermissionsSettings() {
                   Hủy
                 </Button>
               </DialogClose>
-              <Button type="submit" disabled={createRole.isPending || updateRole.isPending || replaceAssignmentRules.isPending || (canManageAssignmentRules && (isCreatingRole || selected?.name !== "ADMIN") && assignmentRulesLoading)}>
+              <Button type="submit" disabled={createRole.isPending || updateRole.isPending || saveAssignmentRule.isPending || (canManageAssignmentRules && (isCreatingRole || selected?.code !== "admin") && (assignmentRulesLoading || !assignmentRules))}>
                 {isCreatingRole ? "Tạo vai trò" : "Lưu"}
               </Button>
             </div>

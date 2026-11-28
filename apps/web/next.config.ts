@@ -1,6 +1,8 @@
 import type { NextConfig } from 'next';
 import path from 'node:path';
 
+const apiUrl = new URL(process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4100');
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@nexus/shared'],
@@ -11,6 +13,12 @@ const nextConfig: NextConfig = {
         hostname: process.env.MINIO_ENDPOINT ?? 'localhost',
         port: process.env.MINIO_PORT ?? '9000',
         pathname: '/**',
+      },
+      {
+        protocol: apiUrl.protocol.slice(0, -1) as 'http' | 'https',
+        hostname: apiUrl.hostname,
+        port: apiUrl.port,
+        pathname: '/api/v1/**',
       },
     ],
   },

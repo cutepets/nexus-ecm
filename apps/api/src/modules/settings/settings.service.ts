@@ -1,11 +1,15 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { createHash, randomBytes } from "node:crypto";
 import { AuditContext, AuditService } from "../../core/audit/audit.service";
 import { PrismaService } from "../../core/prisma/prisma.service";
 import { StorageService } from "../../core/storage/storage.service";
+import { CryptoService } from "../../core/crypto/crypto.service";
+import { GoogleDriveStorageProvider } from "../../core/storage/google-drive-storage.provider";
 import {
   CreateBranchDto,
   CreateEmployeeBranchAssignmentDto,
@@ -24,6 +28,8 @@ export class SettingsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly storage: StorageService,
+    private readonly crypto: CryptoService,
+    private readonly googleDrive: GoogleDriveStorageProvider,
   ) {}
 
   private async companyRecord() {
@@ -37,13 +43,19 @@ export class SettingsService {
   private async companyResponse(
     record: Awaited<ReturnType<SettingsService["companyRecord"]>>,
   ) {
-    const { logoKey, ...safe } = record;
+    const {
+      logoKey,
+      googleDriveOAuthClientSecretEnc: _googleDriveOAuthClientSecretEnc,
+      googleDriveOAuthRefreshTokenEnc: _googleDriveOAuthRefreshTokenEnc,
+      googleDriveOAuthStateHash: _googleDriveOAuthStateHash,
+      googleDriveOAuthStateExpiresAt: _googleDriveOAuthStateExpiresAt,
+      googleDriveConfigFingerprint: _googleDriveConfigFingerprint,
+      ...safe
+    } = record;
     return {
       ...safe,
       timezone: "Asia/Ho_Chi_Minh",
-      logoUrl: logoKey
-        ? await this.storage.presignedDownload(logoKey, 3600)
-        : null,
+      logoUrl: logoKey ? await this.storage.presignedDownload(logoKey, 3600) : null,
     };
   }
 
@@ -55,10 +67,180 @@ export class SettingsService {
     const setting = await this.companyRecord();
     return {
       companyName: setting.companyName,
-      logoUrl: setting.logoKey
-        ? await this.storage.presignedDownload(setting.logoKey, 3600)
-        : null,
+      logoUrl: setting.logoKey ? await this.storage.presignedDownload(setting.logoKey, 3600) : null,
     };
+  }
+
+  async getStorageSettings() {
+    await this.companyRecord();
+    const [setting] = await this.prisma.$queryRaw<Array<{
+      storageProvider: string | null;
+      googleDriveFolderId: string | null;
+      googleDriveOAuthClientId: string | null;
+      googleDriveOAuthClientSecretEnc: Uint8Array | null;
+      googleDriveOAuthRefreshTokenEnc: Uint8Array | null;
+      googleDriveOAuthEmail: string | null;
+      googleDriveConnectionVerifiedAt: Date | null;
+    }>>`SELECT "storageProvider"::text AS "storageProvider", "googleDriveFolderId", "googleDriveOAuthClientId", "googleDriveOAuthClientSecretEnc", "googleDriveOAuthRefreshTokenEnc", "googleDriveOAuthEmail", "googleDriveConnectionVerifiedAt" FROM "company_settings" WHERE id = 'default' LIMIT 1`;
+    const environmentProvider = process.env.STORAGE_PROVIDER?.trim().toUpperCase();
+    return {
+      storageProvider: setting?.storageProvider ?? (environmentProvider === "GOOGLE_DRIVE" ? "GOOGLE_DRIVE" : "MINIO"),
+      googleDriveFolderId: setting?.googleDriveFolderId ?? "",
+      googleDriveOAuthClientId: setting?.googleDriveOAuthClientId ?? "",
+      oauthClientSecretConfigured: Boolean(setting?.googleDriveOAuthClientSecretEnc),
+      oauthConnected: Boolean(setting?.googleDriveOAuthRefreshTokenEnc),
+      googleDriveOAuthEmail: setting?.googleDriveOAuthEmail ?? null,
+      oauthRedirectUri: this.googleDrive.oauthRedirectUri(),
+      connectionVerified: await this.googleDrive.isConfigured(),
+      connectionVerifiedAt: setting?.googleDriveConnectionVerifiedAt,
+    };
+  }
+
+  async updateGoogleDriveOAuthSettings(
+    dto: { clientId: string; clientSecret?: string; folderId: string },
+    ctx: AuditContext,
+  ) {
+    await this.companyRecord();
+    const clientId = dto.clientId?.trim();
+    const folderId = dto.folderId?.trim();
+    const clientSecret = dto.clientSecret?.trim();
+    if (!clientId || !folderId) throw new BadRequestException("OAuth Client ID và folder ID là bắt buộc.");
+    const [before] = await this.prisma.$queryRaw<Array<{
+      storageProvider: string | null;
+      googleDriveOAuthClientId: string | null;
+      googleDriveOAuthClientSecretEnc: Uint8Array | null;
+    }>>`SELECT "storageProvider"::text AS "storageProvider", "googleDriveOAuthClientId", "googleDriveOAuthClientSecretEnc" FROM "company_settings" WHERE id = 'default' LIMIT 1`;
+    if (!clientSecret && (!before?.googleDriveOAuthClientSecretEnc || before.googleDriveOAuthClientId !== clientId)) {
+      throw new BadRequestException("Cần nhập OAuth Client Secret cho Client ID mới.");
+    }
+    const secretEnc = clientSecret
+      ? this.crypto.encrypt(Buffer.from(clientSecret, "utf8"))
+      : Buffer.from(before!.googleDriveOAuthClientSecretEnc!);
+    const clientChanged = before?.googleDriveOAuthClientId !== clientId || Boolean(clientSecret);
+    await this.prisma.$executeRaw`
+      UPDATE "company_settings"
+      SET "googleDriveOAuthClientId" = ${clientId},
+          "googleDriveOAuthClientSecretEnc" = ${secretEnc},
+          "googleDriveOAuthRefreshTokenEnc" = CASE WHEN ${clientChanged} THEN NULL ELSE "googleDriveOAuthRefreshTokenEnc" END,
+          "googleDriveOAuthEmail" = CASE WHEN ${clientChanged} THEN NULL ELSE "googleDriveOAuthEmail" END,
+          "googleDriveFolderId" = ${folderId},
+          "googleDriveOAuthStateHash" = NULL,
+          "googleDriveOAuthStateExpiresAt" = NULL,
+          "googleDriveConnectionVerifiedAt" = NULL,
+          "googleDriveConfigFingerprint" = NULL,
+          "storageProvider" = CASE WHEN "storageProvider" = 'GOOGLE_DRIVE'::"StorageProvider"
+            THEN 'MINIO'::"StorageProvider" ELSE "storageProvider" END
+      WHERE id = 'default'`;
+    await this.audit.record({
+      action: "UPDATE",
+      entity: "StorageSettings",
+      entityId: "default",
+      before: { storageProvider: before?.storageProvider ?? "MINIO" },
+      after: { authMode: "OAUTH", googleDriveFolderId: folderId, oauthClientUpdated: clientChanged },
+      ctx,
+    });
+    return this.getStorageSettings();
+  }
+
+  async startGoogleDriveOAuth() {
+    await this.companyRecord();
+    const state = randomBytes(32).toString("base64url");
+    const stateHash = createHash("sha256").update(state).digest("hex");
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    await this.prisma.$executeRaw`
+      UPDATE "company_settings"
+      SET "googleDriveOAuthStateHash" = ${stateHash},
+          "googleDriveOAuthStateExpiresAt" = ${expiresAt}
+      WHERE id = 'default'`;
+    return {
+      url: await this.googleDrive.createOAuthAuthorizationUrl(state),
+      redirectUri: this.googleDrive.oauthRedirectUri(),
+    };
+  }
+
+  async completeGoogleDriveOAuth(state: string, code: string) {
+    if (!state || !code) throw new BadRequestException("Thiếu mã xác thực hoặc trạng thái OAuth.");
+    const stateHash = createHash("sha256").update(state).digest("hex");
+    const consumed = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      UPDATE "company_settings"
+      SET "googleDriveOAuthStateHash" = NULL,
+          "googleDriveOAuthStateExpiresAt" = NULL
+      WHERE id = 'default'
+        AND "googleDriveOAuthStateHash" = ${stateHash}
+        AND "googleDriveOAuthStateExpiresAt" > NOW()
+      RETURNING id`;
+    if (!consumed.length) throw new BadRequestException("Liên kết OAuth đã hết hạn hoặc đã được sử dụng. Hãy bắt đầu kết nối lại.");
+
+    const { refreshToken, email } = await this.googleDrive.exchangeOAuthCode(code);
+    const refreshTokenEnc = this.crypto.encrypt(Buffer.from(refreshToken, "utf8"));
+    await this.prisma.$executeRaw`
+      UPDATE "company_settings"
+      SET "googleDriveOAuthRefreshTokenEnc" = ${refreshTokenEnc},
+          "googleDriveOAuthEmail" = ${email},
+          "googleDriveConnectionVerifiedAt" = NULL,
+          "googleDriveConfigFingerprint" = NULL
+      WHERE id = 'default'`;
+    const result = await this.googleDrive.testConnection();
+    await this.prisma.$executeRaw`
+      UPDATE "company_settings"
+      SET "googleDriveConnectionVerifiedAt" = ${new Date()},
+          "googleDriveConfigFingerprint" = ${result.configFingerprint}
+      WHERE id = 'default'`;
+    return { email, folderName: result.folderName };
+  }
+
+  async testGoogleDriveConnection(ctx: AuditContext) {
+    const result = await this.googleDrive.testConnection();
+    await this.prisma.$executeRaw`
+      UPDATE "company_settings"
+      SET "googleDriveConnectionVerifiedAt" = ${new Date()},
+          "googleDriveConfigFingerprint" = ${result.configFingerprint}
+      WHERE id = 'default'`;
+    await this.audit.record({
+      action: "UPDATE",
+      entity: "StorageSettings",
+      entityId: "default",
+      after: { googleDriveConnectionVerified: true, folderName: result.folderName },
+      ctx,
+    });
+    const { configFingerprint: _fingerprint, ...safeResult } = result;
+    return safeResult;
+  }
+
+  async selectStorageProvider(provider: string, ctx: AuditContext) {
+    const normalized = provider.trim().toUpperCase();
+    if (normalized !== "MINIO" && normalized !== "GOOGLE_DRIVE") {
+      throw new BadRequestException("Chế độ lưu trữ phải là MINIO hoặc GOOGLE_DRIVE.");
+    }
+    await this.companyRecord();
+    const [before] = await this.prisma.$queryRaw<Array<{
+      storageProvider: string | null;
+      googleDriveConnectionVerifiedAt: Date | null;
+      googleDriveConfigFingerprint: string | null;
+    }>>`SELECT "storageProvider"::text AS "storageProvider", "googleDriveConnectionVerifiedAt", "googleDriveConfigFingerprint" FROM "company_settings" WHERE id = 'default' LIMIT 1`;
+    let verifiedAt = before?.googleDriveConnectionVerifiedAt ?? null;
+    let configFingerprint = before?.googleDriveConfigFingerprint ?? null;
+    if (normalized === "GOOGLE_DRIVE") {
+      const result = await this.googleDrive.testConnection();
+      verifiedAt = new Date();
+      configFingerprint = result.configFingerprint;
+    }
+    await this.prisma.$executeRaw`
+      UPDATE "company_settings"
+      SET "storageProvider" = CASE WHEN ${normalized} = 'GOOGLE_DRIVE'
+            THEN 'GOOGLE_DRIVE'::"StorageProvider" ELSE 'MINIO'::"StorageProvider" END,
+          "googleDriveConnectionVerifiedAt" = ${verifiedAt},
+          "googleDriveConfigFingerprint" = ${configFingerprint}
+      WHERE id = 'default'`;
+    await this.audit.record({
+      action: "UPDATE",
+      entity: "StorageSettings",
+      entityId: "default",
+      before: { storageProvider: before?.storageProvider ?? "MINIO" },
+      after: { storageProvider: normalized },
+      ctx,
+    });
+    return this.getStorageSettings();
   }
 
   async updateCompany(dto: UpdateCompanySettingDto, ctx: AuditContext) {

@@ -67,10 +67,11 @@ export function useLeaveBalances(employeeId: string) {
   });
 }
 
-export function useLeaveRequests(filters: { employeeId?: string; status?: string } = {}) {
+export function useLeaveRequests(filters: { employeeId?: string; status?: string } = {}, enabled = true) {
   return useQuery({
     queryKey: keys.requests(filters),
     queryFn: async () => (await api.get<LeaveRequest[]>('/leave/requests', { params: filters })).data,
+    enabled,
   });
 }
 
@@ -135,7 +136,8 @@ export async function uploadLeaveDoc(file: File): Promise<string> {
   const { data } = await api.post<{ url: string; key: string }>('/leave/uploads', {
     fileName: file.name,
   });
-  await fetch(data.url, { method: 'PUT', body: file });
+  const response = await fetch(data.url, { method: 'PUT', body: file });
+  if (!response.ok) throw new Error('Tải tệp đính kèm lên không thành công');
   return data.key;
 }
 

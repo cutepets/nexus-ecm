@@ -2,6 +2,10 @@
 FROM node:20-alpine AS builder
 RUN corepack enable
 WORKDIR /app
+ARG API_URL=http://localhost:4100
+ARG NEXT_PUBLIC_API_URL=http://localhost:4100/api/v1
+ENV API_URL=${API_URL}
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY packages ./packages

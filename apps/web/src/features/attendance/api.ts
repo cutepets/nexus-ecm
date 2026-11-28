@@ -197,12 +197,13 @@ export interface AttendanceHistoryFilters {
   status?: string;
   approvalStatus?: "APPROVED" | "PENDING" | "REJECTED";
 }
-export function useAttendanceHistory(filters: AttendanceHistoryFilters) {
+export function useAttendanceHistory(filters: AttendanceHistoryFilters, enabled = true) {
   return useQuery({
     queryKey: ["attendance", "history", filters],
     queryFn: async () =>
       (await api.get<AttendanceRecord[]>("/attendance", { params: filters }))
         .data,
+    enabled,
   });
 }
 export function useAttendanceDetail(id: string) {

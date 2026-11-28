@@ -60,7 +60,7 @@ export interface DataTableProps<TData, TValue> {
   minTableWidth?: number;
   /** @deprecated Tables now auto-size to content and scroll inside their own container. */
   fitColumns?: boolean;
-  /** Persists the user's resized column proportions in this browser. */
+  /** Stable key for this table's per-browser column and pagination preferences. */
   tableId?: string;
   /** Render page filters before the column chooser in the table toolbar. */
   toolbarContent?: React.ReactNode;
@@ -141,6 +141,7 @@ export function DataTable<TData, TValue>({
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
   const [columnOrder, setColumnOrder] = React.useState<ColumnOrderState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<ColumnVisibilityState>({});
+  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize });
   const [columnsOpen, setColumnsOpen] = React.useState(false);
   const columnsPopoverRef = React.useRef<HTMLDivElement>(null);
   const columnIds = React.useMemo(
@@ -157,8 +158,34 @@ export function DataTable<TData, TValue>({
   const resolvedTableId = tableId ?? columnIds.join('|');
   const preferencesStorageKey = `nexus:data-table:${resolvedTableId}:columns`;
   const sizingStorageKey = `nexus:data-table:${resolvedTableId}:column-sizing`;
+  const pageSizeStorageKey = `nexus:data-table:${resolvedTableId}:page-size`;
   const hasRestoredSizing = React.useRef(!sizingStorageKey);
   const [restoredPreferencesKey, setRestoredPreferencesKey] = React.useState<string | null>(null);
+  const [restoredPageSizeKey, setRestoredPageSizeKey] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    try {
+      const saved = Number(window.localStorage.getItem(pageSizeStorageKey));
+      if (Number.isInteger(saved) && saved > 0) {
+        setPagination({ pageIndex: 0, pageSize: saved });
+      } else {
+        setPagination({ pageIndex: 0, pageSize });
+      }
+    } catch {
+      setPagination({ pageIndex: 0, pageSize });
+    } finally {
+      setRestoredPageSizeKey(pageSizeStorageKey);
+    }
+  }, [pageSize, pageSizeStorageKey]);
+
+  React.useEffect(() => {
+    if (restoredPageSizeKey !== pageSizeStorageKey) return;
+    try {
+      window.localStorage.setItem(pageSizeStorageKey, String(pagination.pageSize));
+    } catch {
+      // Continue using the selected page size when browser storage is unavailable.
+    }
+  }, [pageSizeStorageKey, pagination.pageSize, restoredPageSizeKey]);
 
   React.useEffect(() => {
     try {
@@ -245,23 +272,23 @@ export function DataTable<TData, TValue>({
   const table = useReactTable({
     data,
     columns,
-    state: { sorting, globalFilter, columnSizing, columnOrder, columnVisibility },
+    state: { sorting, globalFilter, columnSizing, columnOrder, columnVisibility, pagination },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     onColumnSizingChange: handleColumnSizingChange,
     onColumnOrderChange: setColumnOrder,
     onColumnVisibilityChange: setColumnVisibility,
+    onPaginationChange: setPagination,
     columnResizeMode: 'onChange',
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    initialState: { pagination: { pageSize } },
   });
 
   const rows = table.getRowModel().rows;
   const filteredRowCount = table.getFilteredRowModel().rows.length;
-  const pageSizeOptions = [...new Set([10, 25, 50, 100, pageSize])].sort(
+  const pageSizeOptions = [...new Set([10, 25, 50, 100, pagination.pageSize])].sort(
     (a, b) => a - b,
   );
   const columnWidth = (id: string, configuredSize?: number) =>
@@ -286,7 +313,7 @@ export function DataTable<TData, TValue>({
   };
 
   return (
-    <div className="w-full min-w-0 space-y-3">
+    <div className="w-full max-w-full min-w-0 space-y-3">
       <div className="flex min-w-0 flex-wrap items-center gap-3">
         {toolbarContent}
         {searchable ? (
@@ -305,6 +332,7 @@ export function DataTable<TData, TValue>({
             type="button"
             variant="secondary"
             size="sm"
+            className="min-h-11 sm:min-h-9"
             aria-expanded={columnsOpen}
             aria-controls="data-table-column-options"
             onClick={() => setColumnsOpen((open) => !open)}
@@ -367,10 +395,9 @@ export function DataTable<TData, TValue>({
         </div>
       </div>
 
-      <div className="w-full min-w-0 max-w-full overflow-hidden rounded-card border border-border bg-card shadow-card">
+      <div className="w-full min-w-0 overflow-hidden rounded-card border border-border bg-card shadow-card">
         <div
-          className="max-h-[75dvh] min-h-0 w-full min-w-0 overflow-auto overscroll-contain"
-          style={{ maxHeight: 'max(12rem, min(75dvh, calc(100dvh - 24rem)))' }}
+          className="h-[min(46dvh,30rem)] min-h-0 w-full min-w-0 overflow-x-auto overflow-y-auto overscroll-contain sm:h-[min(62dvh,42rem)]"
         >
           <table
             className="table-auto w-full min-w-max text-sm"
@@ -384,7 +411,7 @@ export function DataTable<TData, TValue>({
                     return (
                       <th
                         key={header.id}
-                        className="sticky top-0 z-10 relative truncate whitespace-nowrap bg-card px-2 py-3 text-left text-xs font-medium text-ink-subtle"
+                        className="sticky top-0 z-10 relative truncate whitespace-nowrap bg-card px-3 py-4 text-left text-xs font-medium text-ink-subtle sm:px-2 sm:py-3"
                         style={{ width: columnWidth(header.column.id, header.column.columnDef.size) }}
                       >
                         {header.isPlaceholder ? null : canSort ? (
@@ -418,7 +445,7 @@ export function DataTable<TData, TValue>({
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b border-border last:border-0">
                     {columns.map((_, j) => (
-                      <td key={j} className="px-4 py-3">
+                      <td key={j} className="px-3 py-4 sm:px-4 sm:py-3">
                         <Skeleton className="h-4 w-full max-w-32" />
                       </td>
                     ))}
@@ -435,7 +462,7 @@ export function DataTable<TData, TValue>({
                     )}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-3 text-ink" style={{ width: columnWidth(cell.column.id, cell.column.columnDef.size) }}>
+                      <td key={cell.id} className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-4 text-ink sm:px-2 sm:py-3" style={{ width: columnWidth(cell.column.id, cell.column.columnDef.size) }}>
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}
@@ -477,6 +504,7 @@ export function DataTable<TData, TValue>({
             <Button
               variant="secondary"
               size="icon"
+              className="min-h-11 min-w-11"
               aria-label="Previous page"
               title="Previous page"
               onClick={() => table.previousPage()}
@@ -490,6 +518,7 @@ export function DataTable<TData, TValue>({
             <Button
               variant="secondary"
               size="icon"
+              className="min-h-11 min-w-11"
               aria-label="Next page"
               title="Next page"
               onClick={() => table.nextPage()}

@@ -35,6 +35,65 @@ export interface CompanyBranding {
   companyName: string;
   logoUrl?: string | null;
 }
+
+export interface StorageSettings {
+  storageProvider: "MINIO" | "GOOGLE_DRIVE";
+  googleDriveFolderId: string;
+  googleDriveOAuthClientId: string;
+  oauthClientSecretConfigured: boolean;
+  oauthConnected: boolean;
+  googleDriveOAuthEmail?: string | null;
+  oauthRedirectUri: string;
+  connectionVerified: boolean;
+  connectionVerifiedAt?: string | null;
+}
+
+export function useStorageSettings(enabled = true) {
+  return useQuery({
+    queryKey: ["settings", "storage"],
+    queryFn: async () => (await api.get<StorageSettings>("/settings/storage")).data,
+    enabled,
+  });
+}
+
+export function useUpdateGoogleDriveOAuthSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (settings: { clientId: string; clientSecret?: string; folderId: string }) =>
+      (await api.put<StorageSettings>("/settings/storage/google-drive/oauth", settings)).data,
+    onSuccess: (settings) => queryClient.setQueryData(["settings", "storage"], settings),
+  });
+}
+
+export function useStartGoogleDriveOAuth() {
+  return useMutation({
+    mutationFn: async () =>
+      (await api.post<{ url: string; redirectUri: string }>("/settings/storage/google-drive/oauth/start")).data,
+  });
+}
+
+export function useTestGoogleDriveConnection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await api.post<{ connected: boolean; folderName: string; clientEmail: string }>("/settings/storage/google-drive/test")).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["settings", "storage"] }),
+  });
+}
+
+export function useSelectStorageProvider() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (provider: "MINIO" | "GOOGLE_DRIVE") =>
+      (await api.put<StorageSettings>("/settings/storage/provider", { provider })).data,
+    onSuccess: (settings) => queryClient.setQueryData(["settings", "storage"], settings),
+  });
+}
+
+function resolveLogoUrl<T extends { logoUrl?: string | null }>(value: T): T {
+  return value.logoUrl
+    ? { ...value, logoUrl: new URL(value.logoUrl, `${api.defaults.baseURL}/`).toString() }
+    : value;
+}
 export interface Branch {
   id: string;
   code: string;
@@ -113,7 +172,7 @@ export function useCompanySetting() {
   return useQuery({
     queryKey: ["settings", "company"],
     queryFn: async () =>
-      (await api.get<CompanySetting>("/settings/company")).data,
+      resolveLogoUrl((await api.get<CompanySetting>("/settings/company")).data),
   });
 }
 
@@ -121,7 +180,7 @@ export function useCompanyBranding() {
   return useQuery({
     queryKey: ["settings", "branding"],
     queryFn: async () =>
-      (await api.get<CompanyBranding>("/settings/branding")).data,
+      resolveLogoUrl((await api.get<CompanyBranding>("/settings/branding")).data),
     staleTime: 30 * 60 * 1000,
   });
 }
@@ -130,7 +189,7 @@ export function useUpdateCompanySetting() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (setting: UpdateCompanySetting) =>
-      (await api.put<CompanySetting>("/settings/company", setting)).data,
+      resolveLogoUrl((await api.put<CompanySetting>("/settings/company", setting)).data),
     onSuccess: (setting) => {
       queryClient.setQueryData(["settings", "company"], setting);
       queryClient.setQueryData(["settings", "branding"], {

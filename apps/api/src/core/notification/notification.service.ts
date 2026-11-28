@@ -46,7 +46,7 @@ export class NotificationService {
   /** Notify every user holding a given role (e.g. all HR). */
   async notifyRole(roleName: string, input: NotifyInput) {
     const users = await this.prisma.user.findMany({
-      where: { roles: { some: { role: { name: roleName } } }, isActive: true },
+      where: { roles: { some: { role: { code: roleName.toLowerCase() } } }, isActive: true },
       select: { id: true },
     });
     await Promise.all(users.map((u) => this.notifyUser(u.id, input)));

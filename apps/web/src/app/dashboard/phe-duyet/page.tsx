@@ -86,19 +86,21 @@ function ApprovalList({ items, empty }: { items: ApprovalItem[]; empty: string }
 }
 
 export default function ApprovalCenterPage() {
-  const canApproveLeave = useAuthStore((state) => state.hasPermission("leave:approve"));
-  const canApproveAttendance = useAuthStore((state) => state.hasPermission("attendance:review"));
-  const { data: leaves, isLoading: leavesLoading } = useLeaveRequests();
-  const { data: attendance, isLoading: attendanceLoading } = useAttendanceHistory({});
+  const hasPermission = useAuthStore((state) => state.hasPermission);
+  const canApproveLeave = hasPermission("leave:approve");
+  const canApproveAttendance = hasPermission("attendance:review");
+  const canReadAttendance = canApproveAttendance && hasPermission("attendance:read");
+  const { data: leaves, isLoading: leavesLoading } = useLeaveRequests({}, canApproveLeave);
+  const { data: attendance, isLoading: attendanceLoading } = useAttendanceHistory({}, canReadAttendance);
   const items = useMemo(() => [
     ...(canApproveLeave ? (leaves ?? []).map(leaveItem) : []),
-    ...(canApproveAttendance ? (attendance ?? []).map(attendanceItem).filter((item): item is ApprovalItem => Boolean(item)) : []),
-  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()), [attendance, canApproveAttendance, canApproveLeave, leaves]);
+    ...(canReadAttendance ? (attendance ?? []).map(attendanceItem).filter((item): item is ApprovalItem => Boolean(item)) : []),
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()), [attendance, canApproveLeave, canReadAttendance, leaves]);
   const pending = items.filter((item) => item.status === "PENDING");
   const supplement = items.filter((item) => item.status === "NEEDS_MORE_INFO");
   const rejected = items.filter((item) => item.status === "REJECTED");
   const approved = items.filter((item) => item.status === "APPROVED");
 
-  if (!canApproveLeave && !canApproveAttendance) return <EmptyState icon={ClipboardCheck} title="Không có quyền phê duyệt" description="Mục này dành cho người quản lý hoặc quản trị viên." />;
+  if (!canApproveLeave && !canReadAttendance) return <EmptyState icon={ClipboardCheck} title="Không có yêu cầu phê duyệt" />;
   return <div className="space-y-6"><PageHeader title="Phê duyệt" description="Duyệt nghỉ phép và các yêu cầu sửa công. Bấm một dòng để xem chi tiết và xử lý." /><Tabs defaultValue="pending"><TabsList className="flex max-w-full overflow-x-auto"><TabsTrigger value="all">Tất cả ({items.length})</TabsTrigger><TabsTrigger value="pending">Chờ duyệt ({pending.length})</TabsTrigger><TabsTrigger value="supplement">Bổ sung ({supplement.length})</TabsTrigger><TabsTrigger value="rejected">Từ chối ({rejected.length})</TabsTrigger><TabsTrigger value="approved">Đã duyệt ({approved.length})</TabsTrigger></TabsList><p className="mt-3 text-sm text-ink-muted">{leavesLoading || attendanceLoading ? "Đang tải danh sách phê duyệt…" : ""}</p><TabsContent value="all"><ApprovalList items={items} empty="Chưa có yêu cầu phê duyệt" /></TabsContent><TabsContent value="pending"><ApprovalList items={pending} empty="Không có yêu cầu chờ duyệt" /></TabsContent><TabsContent value="supplement"><ApprovalList items={supplement} empty="Không có yêu cầu cần bổ sung" /></TabsContent><TabsContent value="rejected"><ApprovalList items={rejected} empty="Không có yêu cầu bị từ chối" /></TabsContent><TabsContent value="approved"><ApprovalList items={approved} empty="Chưa có yêu cầu đã duyệt" /></TabsContent></Tabs></div>;
 }

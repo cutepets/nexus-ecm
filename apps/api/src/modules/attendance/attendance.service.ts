@@ -1738,7 +1738,10 @@ export class AttendanceService {
     const where: Prisma.AttendanceWhereInput = {};
     // Non-privileged users are locked to their own records.
     if (scopeEmployeeId) where.employeeId = scopeEmployeeId;
-    else if (query.employeeId) where.employeeId = query.employeeId;
+    else if (query.employeeId) {
+      const employeeIds = query.employeeId.split(",").filter(Boolean);
+      where.employeeId = employeeIds.length > 1 ? { in: employeeIds } : employeeIds[0];
+    }
     if (branchIds) {
       if (!branchIds.length) return [];
       const from = branchPeriod?.from ?? new Date();
@@ -2326,21 +2329,6 @@ export class AttendanceService {
       radiusMeters: location.radiusMeters,
       allowRemote: false,
     }));
-
-    const timezone = await this.companyTimezone();
-    const workDate = workDateInTimeZone(new Date(), timezone);
-    const assignments = await this.activeAssignments(employeeId, workDate);
-    return assignments.flatMap((assignment) =>
-      assignment.branch.locations.map((location) => ({
-        id: location.id,
-        name: location.name,
-        branchName: assignment.branch.name,
-        latitude: location.latitude,
-        longitude: location.longitude,
-        radiusMeters: location.radiusMeters,
-        allowRemote: assignment.allowRemote || location.allowRemote,
-      })),
-    );
   }
 
   // ---- internals ----
@@ -2366,7 +2354,7 @@ export class AttendanceService {
     const latestOut = [...sessions]
       .reverse()
       .find((session) => session.checkOutAt);
-    let schedule = attendance.manualWorkScheduleId
+    const schedule = attendance.manualWorkScheduleId
       ? await tx.workSchedule.findUnique({
           where: { id: attendance.manualWorkScheduleId },
           select: { startTime: true },
@@ -2629,7 +2617,7 @@ export class AttendanceService {
           is: {
             deletedAt: null,
             isActive: true,
-            roles: { some: { role: { name: "ADMIN" } } },
+            roles: { some: { role: { code: "admin" } } },
           },
         },
       },

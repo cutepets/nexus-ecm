@@ -1,0 +1,7 @@
+hr.petshophanoi.com {
+	encode zstd gzip
+
+	@api path /api/v1/* /socket.io/* /socket.io
+	reverse_proxy @api nexus-api:4000
+	reverse_proxy nexus-web:3100
+}

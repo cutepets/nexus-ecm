@@ -37,3 +37,4 @@ uploads/
 
 # face-api model weights are committed in apps/web/public/models
 .gitnexus
+/geoip/*.mmdb

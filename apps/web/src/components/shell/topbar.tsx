@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuthStore } from '@/stores/auth-store';
+import { canAccessNavItem, findNavItemForPath } from '@/lib/nav';
 import { useLogout } from '@/features/auth/api';
 import { useMyProfile } from '@/features/users/self-profile';
 import { getAudioContextConstructor, playNotificationAudio, playNotificationTone } from '@/features/notifications/sound';
@@ -32,26 +33,31 @@ function initials(name?: string) {
 }
 
 const ROLE_LABEL: Record<string, string> = {
+  admin: 'Chủ cửa hàng',
   ADMIN: 'Chủ cửa hàng',
-  HR: 'Nhân sự',
-  MANAGER: 'Quản lý',
-  EMPLOYEE: 'Nhân viên',
+  employee: 'Nhân viên',
+  manager: 'Quản lý',
 };
 
 export function Topbar() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const setAuth = useAuthStore((s) => s.setAuth);
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+  const canReadNotifications = hasPermission('notification:read');
+  const settingsRoute = findNavItemForPath('/dashboard/pengaturan');
+  const canOpenSettings = Boolean(settingsRoute && canAccessNavItem(settingsRoute, hasPermission));
   const logout = useLogout();
   const { data: profile } = useMyProfile();
-  const { data: notifications } = useNotifications();
-  const { data: unread } = useUnreadCount();
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const { data: notifications } = useNotifications(canReadNotifications && notificationsOpen);
+  const { data: unread } = useUnreadCount(canReadNotifications);
   const markAll = useMarkAllRead();
   const soundEnabled = useNotificationPreferences((state) => state.soundEnabled);
   const notificationVolume = useNotificationPreferences((state) => state.volume);
   const notificationTone = useNotificationPreferences((state) => state.tone);
   const customSoundDataUrl = useNotificationPreferences((state) => state.customSoundDataUrl);
-  const knownNotificationIds = useRef<Set<string> | null>(null);
+  const previousUnreadCount = useRef<number | null>(null);
   const audioContext = useRef<AudioContext | null>(null);
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission | 'unsupported'>('unsupported');
 
@@ -70,32 +76,25 @@ export function Topbar() {
   }, []);
 
   useEffect(() => {
-    if (!notifications) return;
-    const ids = new Set(notifications.map((notification) => notification.id));
-    if (!knownNotificationIds.current) {
-      knownNotificationIds.current = ids;
-      return;
-    }
+    if (unread === undefined) return;
+    const previousCount = previousUnreadCount.current;
+    previousUnreadCount.current = unread.count;
+    if (previousCount === null || unread.count <= previousCount) return;
 
-    const incoming = notifications.filter((notification) => !knownNotificationIds.current!.has(notification.id));
-    knownNotificationIds.current = ids;
-    if (!incoming.length) return;
-
-    for (const notification of incoming) {
-      toast(notification.title, { description: notification.body ?? undefined });
-      if (soundEnabled) {
-        if (notificationTone === 'CUSTOM') playNotificationAudio(customSoundDataUrl, notificationVolume);
-        else playNotificationTone(audioContext.current, notificationTone, notificationVolume);
-      }
-      if (document.hidden && 'Notification' in window && window.Notification.permission === 'granted') {
-        const browserNotification = new window.Notification(notification.title, {
-          body: notification.body ?? undefined,
-          tag: notification.id,
-        });
-        browserNotification.onclick = () => window.focus();
-      }
+    const addedCount = unread.count - previousCount;
+    toast(`${addedCount} thông báo mới`, { description: 'Mở chuông để xem nội dung.' });
+    if (soundEnabled) {
+      if (notificationTone === 'CUSTOM') playNotificationAudio(customSoundDataUrl, notificationVolume);
+      else playNotificationTone(audioContext.current, notificationTone, notificationVolume);
     }
-  }, [customSoundDataUrl, notificationTone, notificationVolume, notifications, soundEnabled]);
+    if (document.hidden && 'Notification' in window && window.Notification.permission === 'granted') {
+      const browserNotification = new window.Notification('Bạn có thông báo mới', {
+        body: `${addedCount} thông báo chưa đọc.`,
+        tag: 'nexus-unread-notifications',
+      });
+      browserNotification.onclick = () => window.focus();
+    }
+  }, [customSoundDataUrl, notificationTone, notificationVolume, soundEnabled, unread]);
 
   useEffect(() => {
     const auth = useAuthStore.getState();
@@ -122,20 +121,20 @@ export function Topbar() {
   };
 
   return (
-    <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-canvas/80 px-6 backdrop-blur">
+    <header className="sticky top-0 z-10 flex h-16 shrink-0 min-w-0 items-center gap-3 border-b border-border bg-canvas/80 px-4 backdrop-blur sm:justify-between sm:px-6">
       <button
         onClick={openPalette}
-        className="flex w-72 items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm text-ink-subtle transition-colors hover:bg-card"
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm text-ink-subtle transition-colors hover:bg-card sm:w-72 sm:flex-none"
       >
         <Search className="size-4" />
-        <span className="flex-1 text-left">Tìm kiếm…</span>
+        <span className="min-w-0 flex-1 truncate text-left">Tìm kiếm…</span>
         <kbd className="rounded-md border border-border bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-ink-subtle">
           ⌘K
         </kbd>
       </button>
 
-      <div className="flex items-center gap-2">
-        <DropdownMenu>
+      <div className="flex shrink-0 items-center gap-2">
+        {canReadNotifications && <DropdownMenu open={notificationsOpen} onOpenChange={setNotificationsOpen}>
           <DropdownMenuTrigger asChild>
             <button
               aria-label="Thông báo"
@@ -181,9 +180,9 @@ export function Topbar() {
               )}
             </div>
           </DropdownMenuContent>
-        </DropdownMenu>
+        </DropdownMenu>}
 
-        <button
+        {canOpenSettings && <button
           type="button"
           aria-label="Cài đặt"
           title="Cài đặt"
@@ -191,7 +190,7 @@ export function Topbar() {
           className="flex size-9 items-center justify-center rounded-xl border border-border bg-card text-ink-muted transition-colors hover:bg-canvas hover:text-ink"
         >
           <Settings className="size-4" />
-        </button>
+        </button>}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

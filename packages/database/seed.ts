@@ -42,42 +42,6 @@ function buildPermissionKeys(): { key: string; module: string }[] {
 // ---- Role → permission mapping ----
 const ROLE_PERMISSIONS: Record<string, (key: string) => boolean> = {
   ADMIN: () => true, // all permissions
-  HR: (k) =>
-    k.startsWith("employee:") ||
-    k.startsWith("candidate:") ||
-    k.startsWith("attendance:") ||
-    k.startsWith("attendance-policy:") ||
-    k.startsWith("branch:") ||
-    k.startsWith("attendance-correction:") ||
-    k.startsWith("payroll:") ||
-    k.startsWith("leave:") ||
-    k.startsWith("document:") ||
-    k.startsWith("dashboard:") ||
-    k === "report:export" ||
-    k === "user:reset-password" ||
-    k === "notification:read",
-  MANAGER: (k) =>
-    k.startsWith("project:") ||
-    k.startsWith("task:") ||
-    k === "leave:approve" ||
-    k === "attendance:review" ||
-    k === "attendance:face:enroll" ||
-    k === "user:reset-password" ||
-    k.startsWith("dashboard:") ||
-    k.endsWith(":read") ||
-    k.startsWith("chat:") ||
-    k === "notification:read",
-  EMPLOYEE: (k) =>
-    k === "dashboard:read" ||
-    k === "attendance:create" ||
-    k === "attendance:read" ||
-    k === "leave:create" ||
-    k === "leave:read" ||
-    k === "task:read" ||
-    k === "task:update" ||
-    k.startsWith("chat:") ||
-    k === "document:read" ||
-    k === "notification:read",
 };
 
 async function main() {
@@ -105,14 +69,17 @@ async function main() {
   console.log("  ✓ company settings");
 
   // 2. Roles + role-permission links
-  for (const roleName of Object.keys(ROLE_PERMISSIONS)) {
+  for (const roleName of ['ADMIN']) {
+    const code = roleName.toLowerCase();
+    const displayName = 'Quản trị viên';
     const role = await prisma.role.upsert({
-      where: { name: roleName },
-      update: {},
+      where: { code },
+      update: { name: displayName, isSystem: true },
       create: {
-        name: roleName,
+        code,
+        name: displayName,
         isSystem: true,
-        description: `${roleName} role`,
+        description: 'Vai trò quản trị hệ thống',
       },
     });
 
@@ -138,7 +105,7 @@ async function main() {
   // email. Preserve that identity rather than failing on the unique username.
   if (accountWithAdminUsername) adminEmail = accountWithAdminUsername.email;
   const adminRole = await prisma.role.findUniqueOrThrow({
-    where: { name: "ADMIN" },
+    where: { code: "admin" },
   });
 
   const admin = await prisma.user.upsert({
