@@ -5,7 +5,7 @@ Follow [`AGENTS.md`](AGENTS.md) for change rules and [`docs/system-map.md`](docs
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **nexus-ecm** (3332 symbols, 8846 relationships, 271 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **nexus-ecm** (3331 symbols, 8846 relationships, 271 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
