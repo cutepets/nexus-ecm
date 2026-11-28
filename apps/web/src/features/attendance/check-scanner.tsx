@@ -983,7 +983,7 @@ export function CheckScanner({
 
   return (
     <div className="mx-auto max-w-md space-y-4">
-      <div className="relative aspect-[4/3] overflow-hidden rounded-card border border-border bg-ink/90">
+      <div className="relative aspect-[3/4] overflow-hidden rounded-card border border-border bg-ink/90 sm:aspect-[4/3]">
         <video
           ref={videoRef}
           className="h-full w-full -scale-x-100 object-cover"

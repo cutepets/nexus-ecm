@@ -2579,7 +2579,7 @@ function PersonalView() {
         </div>
       )}
       {employeeId && <Dialog open={faceEnrollOpen && !me?.enrolled} onOpenChange={setFaceEnrollOpen}>
-        <DialogContent className="p-6">
+        <DialogContent className="top-1/2 max-h-[92dvh] -translate-y-1/2 overflow-y-auto p-4 sm:p-6">
           <DialogTitle>Đăng ký khuôn mặt chấm công</DialogTitle>
           <DialogDescription className="mb-4">Chỉ cần đăng ký một lần. Muốn cập nhật, hãy liên hệ quản lý để xóa mẫu hiện tại trước.</DialogDescription>
           <EnrollScanner employeeId={employeeId} onComplete={() => setFaceEnrollOpen(false)} />
